@@ -347,7 +347,7 @@ def ConvertOutputs(outputLine):
         output (tuple): Tuple containing the relevant data for each output variable
     """    
     output = outputLine.split(" ")
-    if len(output) < 2: output.append("")
+    if len(output) < 2: output.append("L")
 
     output.insert(0, InsertOutputIndex(output[0]))
     output.extend(ExtendDecibelAndExponent(output[2]))
@@ -372,7 +372,7 @@ def GetOutputOrder(outputs):
 
     for i in range(0, len(outputLines)):
         if not (outputLines[i] == ""):
-            outputTerms.append(ConvertOutputs(outputLines[i]))  # .split() added to the end to remove trailing spaces
+            outputTerms.append(ConvertOutputs(outputLines[i].strip()))  # .strip() added to the end to remove trailing spaces
     
     # Removes empty elements from list
     outputTerms = RemoveEmptyElements(outputTerms)
@@ -444,11 +444,24 @@ def CalculateMatrix(circuitComponents, angularFrequency):
 
     return ABCDMatrix
 
+# ============================== FILE WRITING ==============================
+
+def WriteDataToFile(file, outputTerms, outputs):
+    for outputTerm in outputTerms:
+        outputIndex = outputTerm[0]
+        realPart = str(np.real(outputs[outputIndex]))
+        imaginaryPart = str(np.imag(outputs[outputIndex]))
+
+        file.write("," + realPart + "," + imaginaryPart)
+
+        
+
 # =========================================== MAIN CODE ===========================================
 def main():
     # File Reading Section
-    fileName = "TestFiles/a_Test_Circuit_1"
-    with open(fileName + ".net", 'r') as file:
+    fileName = "a_Test_Circuit_1"
+    fileDirectoryAndName = "TestFiles/" + fileName + ".net"
+    with open(fileDirectoryAndName, 'r') as file:
         text = RemoveComments(file)
 
         circuitText = ExtractBlock(text, "<CIRCUIT>", "</CIRCUIT>")
@@ -458,14 +471,39 @@ def main():
     circuitComponents = GetCircuitComponents(circuitText)
     inputSource, sourceImpedance, loadImpedance, startFrequency, endFrequency, numberOfFrequencies = GetTerms(termsText)
     outputTerms = GetOutputOrder(outputText)
-    #print(circuitComponents)
+
 
     circuitOutputs = [0] * 12   # Initialise a list of 12 zeros
     outputMatrix = np.array([[0],
                              [0]])
 
+    outputValues = {
+        "inputVoltage": 0,
+        "outputVoltage": 0,
+        "inputCurrent": 0,
+        "outputCurrent": 0,
+        "inputPower": 0,
+        "outputPower": 0,
+        "inputImpedance": 0,
+        "outputImpedance": 0,
+        "voltageGain": 0,
+        "currentGain": 0,
+        "powerGain": 0,
+        "transmittance": 0,
+    }
+
     # Data Processing Section
     frequencies = np.linspace(int(startFrequency), int(endFrequency), int(numberOfFrequencies))
+
+    # Write to the file
+    with open(fileName + ".csv", 'w') as file:
+        file.write("Freq")
+        for outputTerm in outputTerms:
+            file.write(",Re(" + outputTerm[1] + "),Im(" + outputTerm[1] + ")")
+        file.write("\n Hz")
+        for outputTerm in outputTerms:
+            file.write("," + outputTerm[2] + "," + outputTerm[2])        
+
     for frequency in frequencies:
         ABCDMatrix = CalculateMatrix(circuitComponents, 2*math.pi*frequency)
 
@@ -474,26 +512,30 @@ def main():
         C_C = ABCDMatrix[1, 0]
         D_C = ABCDMatrix[1, 1]
 
-        inputImpedance = (A_C*loadImpedance + B_C)/(C_C*loadImpedance + D_C)
-        outputImpedance = (D_C*sourceImpedance + B_C)/(C_C*sourceImpedance + A_C)
-        voltageGain = loadImpedance/(A_C*loadImpedance+B_C)
-        currentGain = 1/(C_C*loadImpedance+D_C)
-        powerGain = voltageGain*np.conj(currentGain)
-        transmittance = 2/(A_C*loadImpedance+B_C+C_C*loadImpedance*sourceImpedance+D_C*sourceImpedance)
+        outputValues["inputImpedance"] = (A_C * loadImpedance + B_C) / (C_C * loadImpedance + D_C)
+        outputValues["outputImpedance"] = (D_C * sourceImpedance + B_C) / (C_C * sourceImpedance + A_C)
+        outputValues["voltageGain"] = loadImpedance / (A_C * loadImpedance + B_C)
+        outputValues["currentGain"] = 1 / (C_C * loadImpedance + D_C)
+        outputValues["powerGain"] = outputValues["voltageGain"] * np.conj(outputValues["currentGain"])
+        outputValues["transmittance"] = 2 / (A_C * loadImpedance+B_C + C_C * loadImpedance * sourceImpedance + D_C * sourceImpedance)
 
         if "V" in inputSource[0]:
-            inputVoltage = inputSource[1] * (inputImpedance/(sourceImpedance + inputImpedance))
-            inputCurrent = inputVoltage/inputImpedance
-        else:
-            inputCurrent = inputSource[1] * (sourceImpedance/(sourceImpedance + inputImpedance))
-            inputVoltage = inputCurrent * inputImpedance    
-        inputMatrix = np.array([[inputVoltage],
-                                [inputCurrent]])
+            outputValues["inputVoltage"] = inputSource[1] * (outputValues["inputImpedance"] / (sourceImpedance + outputValues["inputImpedance"]))
+            outputValues["inputCurrent"] = outputValues["inputVoltage"] / outputValues["inputImpedance"]
+        else: # Test this later
+            outputValues["inputCurrent"] = inputSource[1] * (sourceImpedance / (sourceImpedance + outputValues["inputImpedance"]))
+            outputValues["inputVoltage"] = outputValues["inputCurrent"] * outputValues["inputImpedance"]    
         
-        inputPower = inputVoltage*np.conj(inputCurrent)
-        outputVoltage = inputVoltage * voltageGain
-        outputCurrent = inputCurrent * currentGain
-        outputPower = outputVoltage*np.conj(outputCurrent)
+        outputValues["inputPower"] = outputValues["inputVoltage"] * np.conj(outputValues["inputCurrent"])
+        outputValues["outputVoltage"] = outputValues["inputVoltage"] * outputValues["voltageGain"]
+        outputValues["outputCurrent"] = outputValues["inputCurrent"] * outputValues["currentGain"]
+        outputValues["outputPower"] = outputValues["outputVoltage"] * np.conj(outputValues["outputCurrent"])
+
+        # File Writing
+        with open(fileName + ".csv", 'a') as file:
+            file.write("\n"+str(frequency))
+            WriteDataToFile(file, outputTerms, list(outputValues.values()))
+        
 
 if __name__ == "__main__":
     main()
