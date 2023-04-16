@@ -440,8 +440,7 @@ def CalculateMatrix(circuitComponents, angularFrequency):
         elif componentType == "L": impedance = 1j*angularFrequency*componentValue
         elif componentType == "C": impedance = 1/(1j*angularFrequency*componentValue)
     
-        if impedance != 0:      
-            print("Getting Component Matrix")                                                
+        if impedance != 0:                                                     
             componentMatrix = GetComponentMatrix(impedance, connectionType)
             ABCDMatrix = np.matmul(ABCDMatrix, componentMatrix)
 
@@ -474,8 +473,9 @@ def WriteDataToFile(file, outputTerms, outputs):
     for outputTerm in outputTerms:
         outputIndex = outputTerm[0]
         outputs[outputIndex] = outputs[outputIndex] / (10 ** outputTerm[4])
+
         # Checks if the value is read in decibels
-        if outputTerms[3]:
+        if (outputTerm[3]):
             decibelValue = ConvertToDecibel(outputs[outputIndex], outputTerm[1])
             firstPart = str(np.real(decibelValue))
             secondPart = str(np.angle(outputs[outputIndex]))
@@ -502,20 +502,8 @@ def main():
     inputSource, sourceImpedance, loadImpedance, startFrequency, endFrequency, numberOfFrequencies = GetTerms(termsText)
     outputTerms = GetOutputOrder(outputText)
 
-    outputValues = {
-        "inputVoltage": 0,
-        "outputVoltage": 0,
-        "inputCurrent": 0,
-        "outputCurrent": 0,
-        "inputPower": 0,
-        "outputPower": 0,
-        "inputImpedance": 0,
-        "outputImpedance": 0,
-        "voltageGain": 0,
-        "currentGain": 0,
-        "powerGain": 0,
-        "transmittance": 0,
-    }
+    outputValues = {"inputVoltage": 0, "outputVoltage": 0, "inputCurrent": 0, "outputCurrent": 0, "inputPower": 0, "outputPower": 0, "inputImpedance": 0, "outputImpedance": 0,
+        "voltageGain": 0, "currentGain": 0, "powerGain": 0, "transmittance": 0,}
 
     # Write to the file
     with open(fileName + ".csv", 'w') as file:
@@ -537,7 +525,6 @@ def main():
     for frequency in frequencies:
         ABCDMatrix = CalculateMatrix(circuitComponents, 2*math.pi*frequency)
 
-        print(ABCDMatrix)
         A_C = ABCDMatrix[0, 0]
         B_C = ABCDMatrix[0, 1]
         C_C = ABCDMatrix[1, 0]
@@ -561,7 +548,7 @@ def main():
         outputValues["outputVoltage"] = outputValues["inputVoltage"] * outputValues["voltageGain"]
         outputValues["outputCurrent"] = outputValues["inputCurrent"] * outputValues["currentGain"]
         outputValues["outputPower"] = outputValues["outputVoltage"] * np.conj(outputValues["outputCurrent"])
-
+        print(outputValues["inputImpedance"])
         # File Writing
         with open(fileName + ".csv", 'a') as file:
             file.write("\n"+str(frequency))
