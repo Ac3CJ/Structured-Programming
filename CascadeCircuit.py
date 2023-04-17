@@ -3,11 +3,10 @@
 # outputTerms tuples are ordered as: (Output Index, Variable Name, Variable Unit, Decibel Boolean, Exponent)
 # 3. Maybe consider what happens when there are two parallel components
 #    connected in series between two nodes (not including common node)
-# 12. Find a way to make the printing of output terms O(n) instead of O(n^2)
-# 19. Figure out why the maths is wrong Ext_a_Test_Circuit_1 for Pout only
+# 19. Figure out why the maths is wrong Pout only
 
 # =========================================== ERROR HANDLING NOTES ===========================================
-# 1. Check if the blocks exist, this should throw the right error
+# 1. Check if the blocks exist, this should throw the right error DONE
 # 2. Check if the blocks are empty
 # 3. Check if there are no source blocks
 # 4. Check for illegal node connections n1=1 n2=5 etc.
@@ -15,22 +14,42 @@
 # 6. Check for when there is no closing delimeter
 # 7. Check for when there is no opening delimeter
 # 8. Check for spaces between the equals and value
-# 9. Check for spaces between dB and unit. For example: dB m V
-# 10. Check for incorrect naming for variables in file
-# 11. Check if the graph input is within range for file.
+# 9. Check for spaces between dB and unit. For example: dB mV
+# 10. Check for incorrect naming for variables in file    DONE
+# 11. Check if the graph input is within range for file.    DONE
+# 12. Check if the same graph is being outputted    DONE
+# 13. Check if there are uncommented comments, decide if the program should stop or ignore it
+# 14. Check for missing variable in circuit block
+# 15. 
 
+# =================================================================================================
 # =========================================== LIBRARIES ===========================================
+# =================================================================================================
+
 import numpy as np
-import math
-import cmath
+import math, sys, getopt, cmath, re
 import pandas as pd
 from matplotlib import pyplot as plt
 
+# ===================================================================================================
 # =========================================== SUBROUTINES ===========================================
+# ===================================================================================================
 
 # ======================== READING AND ORGANISING DATA ========================
 
 # ============== GENERAL ==============
+
+def RemoveRepeatElements(myList):
+    """
+    Removes repeat elements from the list. Creates a dictionary using the list items as keys then makes the dictionary into a list
+
+    Args:
+        myList (list): List to remove repeat elements from
+
+    Returns:
+        list: List with removed repeat elements
+    """    
+    return list(dict.fromkeys(myList))
 
 def RemoveComments(file):
     """
@@ -46,7 +65,6 @@ def RemoveComments(file):
     for line in file:
         if not (line.startswith('#')):     # Checks if the line doesn't start with a #
             text += line
-
     return text
 
 def ExtractBlock(text, start, end):
@@ -65,6 +83,7 @@ def ExtractBlock(text, start, end):
     Returns:
         text (str): Text between the start and end delimiters
     """
+    if not ((start in text) or (end in text)): raise ValueError(start + " block is missing")
     return text[text.find(start)+len(start):text.rfind(end)]     
 
 def RemoveEmptyElements(list0):
@@ -112,8 +131,7 @@ def CheckComponentType(data):
     Returns:
         Boolean: Will return True if the data includes the component type, False if it is node data
     """    
-    if ('R' in data) or ('G' in data) or ('C' in data) or ('L' in data):
-        return True
+    if ('R' in data) or ('G' in data) or ('C' in data) or ('L' in data): return True
     return False
 
 def ConvertCircuitData(component):
@@ -205,6 +223,15 @@ def GetCircuitComponents(circuit):
 
 # ============== TERMS BLOCK ==============
 def CheckLogarithmicSweep(term):
+    """
+    Checks for an L in the term and returns a Boolean
+
+    Args:
+        term (str): String for the term to check
+
+    Returns:
+        boolean: Boolean value to state when to apply the sweep
+    """    
     if "L" in term: return True
     return False
 
@@ -456,10 +483,34 @@ def CalculateMatrix(circuitComponents, angularFrequency):
     return ABCDMatrix
 
 def ConvertToDecibel(value, outputVariable):
+    """
+    Converts the normal units into decibel units. This checks if the output variable is related to power and applies the relevant equation.
+
+    Equation used: https://dspillustrations.com/pages/posts/misc/decibel-conversion-factor-10-or-factor-20.html#:~:text=The%20dB%20is%20calculated%20via,amplitude%2C%20the%20factor%20is%2020.
+
+    Args:
+        value (float): value to convert into decibels
+        outputVariable (str): String of the output variable to check
+
+    Returns:
+        float: Converted decibel value
+    """    
     if ("P" in outputVariable) or ("p" in outputVariable):  return 10*cmath.log10(abs(value))
     return 20*cmath.log10(abs(value))
 
 # ============================== FILE WRITING ==============================
+
+def FormatNumber(value):
+    """
+    Formats the number for writing into the file. This rounds the number to 4 significant figures and converts them into scientific notation
+
+    Args:
+        value (float): The value to be formatted
+
+    Returns:
+        str: String format of the value, written in scientific notation to 4 significant figures
+    """    
+    return  ('{:e}'.format(float('%.4g' % value)))
 
 def WriteDataToFile(file, outputTerms, outputs):
     """
@@ -485,21 +536,62 @@ def WriteDataToFile(file, outputTerms, outputs):
         # Checks if the value is read in decibels
         if (outputTerm[3]):
             decibelValue = ConvertToDecibel(outputs[outputIndex], outputTerm[1])
-            firstPart = str(np.real(decibelValue))
-            secondPart = str(np.angle(outputs[outputIndex]))
+            firstPart = FormatNumber(np.real(decibelValue))
+            secondPart = FormatNumber(np.angle(outputs[outputIndex]))
         else:
-            firstPart = str(np.real(outputs[outputIndex]))
-            secondPart = str(np.imag(outputs[outputIndex]))
+            firstPart = FormatNumber(np.real(outputs[outputIndex]))
+            secondPart = FormatNumber(np.imag(outputs[outputIndex]))
 
         file.write("," + firstPart + "," + secondPart)
 
+# =================================================================================================
 # =========================================== MAIN CODE ===========================================
+# =================================================================================================
+
 def main():
-    # File Reading Section
-    fileName = "Ext_a_Test_Circuit_1"
-    fileDirectoryAndName = "TestFiles/" + fileName + ".net"
-    with open(fileDirectoryAndName, 'r') as file:
-        text = RemoveComments(file)
+    systemArguments = sys.argv[1:]
+    # python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]
+    graphParameters = "1"           # String of 1 to initialise the data
+    graphBoolean = False
+
+    # Sets the netFileName and csvFileName to the first and second entries of the systemArguments, this gets overwritten if the user enters the file for a graph
+    netFileName = systemArguments[0]
+    if len(systemArguments) > 1: csvFileName = systemArguments[1]
+    # Reading System Inputs
+    try:
+        options, arguments = getopt.getopt(systemArguments,"hi:p:")
+    except getopt.GetoptError:
+        print('Input invalid! Input line as: test.py -i <inputfile> -p <parameter>')
+        sys.exit(2)
+
+    for option, argument in options:
+        if option == '-h':
+            print ('test.py -i <inputfile> -p <parameter>')
+            sys.exit()
+        elif option in ("-i", "--ifile"):
+            netFileName = argument + ".net"
+            csvFileName = argument + ".csv"
+            pngFileName = argument
+        elif option in ("-p", "--param"):
+            graphParameters = argument
+            graphBoolean = True
+
+     # Arguments should be empty in this case, when it is full, then the command line prompt is written incorrectly
+    if len(arguments) > 0: raise SyntaxError("Invalid entry: " + ''.join(systemArguments) + "    Example Entry: python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]")
+
+    userColumns= re.findall(r'\d+', graphParameters)    # Use REGEX to extract all numbers
+    userColumns = [int(i) for i in userColumns]         # Convert the strings into integers
+    userColumns = RemoveRepeatElements(userColumns)
+
+    # File Reading and Error Handling
+    try:
+        with open(netFileName, 'r') as file:
+            text = RemoveComments(file)
+    except:
+        raise FileNotFoundError("No file or directory: '" + netFileName + "'")
+
+    if not (".net" in netFileName): raise OSError("File extension is invalid: " + netFileName)
+    elif not (".csv" in csvFileName): raise OSError("File extension is invalid: " + csvFileName)
 
     print("READING FILE")
     circuitText = ExtractBlock(text, "<CIRCUIT>", "</CIRCUIT>")
@@ -510,11 +602,15 @@ def main():
     inputSource, sourceImpedance, loadImpedance, startFrequency, endFrequency, numberOfFrequencies, logarithmicSweepBoolean = GetTerms(termsText)
     outputTerms = GetOutputOrder(outputText)
 
+    # Check if the entered maximum column, the user entered is greater than the output terms or less than equal to 0
+    if (len(outputTerms) < max(userColumns)) or (min(userColumns) <= 0): raise IndexError("Column " + str(max(userColumns)) + 
+                                                                                          " is out of range. Enter a value between 1-" + str(len(outputTerms)-1))
+
     outputValues = {"inputVoltage": 0, "outputVoltage": 0, "inputCurrent": 0, "outputCurrent": 0, "inputPower": 0, "outputPower": 0, "inputImpedance": 0, "outputImpedance": 0,
         "voltageGain": 0, "currentGain": 0, "powerGain": 0, "transmittance": 0,}
 
     # Write to the file
-    with open(fileName + ".csv", 'w') as file:
+    with open(csvFileName, 'w') as file:
         file.write("Freq")
         for outputTerm in outputTerms:
             if (outputTerm[3]): file.write(",|" + outputTerm[1] + "|,/_" + outputTerm[1])
@@ -524,9 +620,9 @@ def main():
             if (outputTerm[3]): file.write("," + outputTerm[2] + ",Rads")   
             else:               file.write("," + outputTerm[2] + "," + outputTerm[2])    
     
+    # Data Processing Section
     print("PROCESSING DATA")
 
-    # Data Processing Section
     # For logspace, apply a log function to the frequencies so that the values are the base of the exponent
     if (logarithmicSweepBoolean == True): frequencies = np.logspace(math.log10(startFrequency), math.log10(endFrequency), int(numberOfFrequencies))
     else: frequencies = np.linspace(startFrequency, endFrequency, int(numberOfFrequencies))
@@ -558,22 +654,23 @@ def main():
         outputValues["inputPower"] = outputValues["inputVoltage"] * np.conj(outputValues["inputCurrent"])
         outputValues["outputVoltage"] = outputValues["inputVoltage"] * outputValues["voltageGain"]
         outputValues["outputCurrent"] = outputValues["inputCurrent"] * outputValues["currentGain"]
+        #outputValues["outputPower"] = outputValues["inputPower"] * outputValues["powerGain"]
         outputValues["outputPower"] = outputValues["outputVoltage"] * np.conj(outputValues["outputCurrent"])
 
         # File Writing
-        with open(fileName + ".csv", 'a') as file:
-            file.write("\n"+str(frequency))
+        with open(csvFileName, 'a') as file:
+            file.write("\n"+FormatNumber(frequency))
             WriteDataToFile(file, outputTerms, list(outputValues.values()))
         
     print("WRITING DATA")
 
     # Output Graphs
-    userColumns = [2, 7, 4]
-    graphCols = [0,] + userColumns
-    outputData = pd.read_csv(fileName + ".csv", skiprows=[0, 1], usecols=graphCols)
-    for i in range(0, len(graphCols)-1):
-        outputData.plot(0, i+1)
-        plt.savefig(fileName + "_" + str(graphCols[i+1]) + ".png")
+    if graphBoolean == True:
+        graphColumns = [0,] + userColumns
+        outputData = pd.read_csv(csvFileName, skiprows=[0, 1], usecols=graphColumns)
+        for i in range(0, len(graphColumns)-1):
+            outputData.plot(0, i+1)
+            plt.savefig(pngFileName + "_" + str(graphColumns[i+1]) + ".png")
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__":  # Allows code to be run as a script, but not when imported as a module. This is the top file
+    main()      # Passes in the arguments except for the script name
