@@ -1,0 +1,6 @@
+For the output block, make the dictionary create the keys in the correct order from the start, which can skip all of the indexing malarky and can possibly allow
+for further optimisations
+
+Use OOP or dictionaries for the circuit block
+
+Use a dictionary for the terms block instead, improves readability and debugging

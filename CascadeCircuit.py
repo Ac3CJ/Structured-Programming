@@ -1,44 +1,35 @@
 # =========================================== TO DO LIST ===========================================
 # Default output terms order (Vin (0), Vout (1), Iin (2), Iout (3), Pin (4), Pout (5), Zin (6), Zout (7), Av (8), Ai (9), Ap (10), T (11))
+# outputTerms tuples are ordered as: (Output Index, Variable Name, Variable Unit, Decibel Boolean, Exponent)
 # 3. Maybe consider what happens when there are two parallel components
 #    connected in series between two nodes (not including common node)
 # 12. Find a way to make the printing of output terms O(n) instead of O(n^2)
-# 13. Print the outputs into a csv file, using the name of the .net file
-# 14. Find out the mathematics of calculating input and output voltage and currents
-# 15. Find out the mathematics of power
-# 16. Find out the mathematics of decibels
-# =========================================== TO DO LIST ===========================================
+# 17. Make the maths more readable
+# 18. Sort out logarithmic sweep
+# 19. Figure out why the maths is wrong for Ext_a_Test_Circuit_1
+
+# =========================================== ERROR HANDLING NOTES ===========================================
+# 1. Check if the blocks exist, this should throw the right error
+# 2. Check if the blocks are empty
+# 3. Check if there are no source blocks
+# 4. Check for illegal node connections n1=1 n2=5 etc.
+# 5. Check for nonsense data in the .NET file, like non commented parts
+# 6. Check for when there is no closing delimeter
+# 7. Check for when there is no opening delimeter
+# 8. Check for spaces between the equals and value
+# 9. Check for spaces between dB and unit. For example: dB m V
+# 10. Check for incorrect naming for variables in file
 
 # =========================================== LIBRARIES ===========================================
 import numpy as np
 import math
+import cmath
 
 # =========================================== SUBROUTINES ===========================================
 
 # ======================== READING AND ORGANISING DATA ========================
 
 # ============== GENERAL ==============
-
-def ExtractExponent(prefix):
-    """
-    Extracts the exponent from the prefix of the units for each variable. This is a case statement to set the exponent for each variable.
-
-    More information about this can be found in the table: https://basicelectronicscoed.files.wordpress.com/2015/07/metric-prefixes.png
-
-    Args:
-        prefix (str): String that contains the character for the prefix
-
-    Returns:
-        int: This is the exponent value
-    """    
-    if   "p" in prefix:   return -12
-    elif "n" in prefix:  return -9
-    elif "u" in prefix:   return -6
-    elif "m" in prefix:  return -3
-    elif "k" in prefix:   return 3
-    elif "M" in prefix:  return 6
-    elif "G" in prefix:   return 9
-    else: return 0
 
 def RemoveComments(file):
     """
@@ -86,6 +77,27 @@ def RemoveEmptyElements(list0):
         list: New list without empty elements
     """    
     return list(filter(None, list0))
+
+def ExtractExponent(prefix):
+    """
+    Extracts the exponent from the prefix of the units for each variable. This is a case statement to set the exponent for each variable.
+
+    More information about this can be found in the table: https://basicelectronicscoed.files.wordpress.com/2015/07/metric-prefixes.png
+
+    Args:
+        prefix (str): String that contains the character for the prefix
+
+    Returns:
+        int: This is the exponent value
+    """    
+    if   "p" in prefix:  return -12
+    elif "n" in prefix:  return -9
+    elif "u" in prefix:  return -6
+    elif "m" in prefix:  return -3
+    elif "k" in prefix:  return 3
+    elif "M" in prefix:  return 6
+    elif "G" in prefix:  return 9
+    else: return 0
 
 # ============== CIRCUIT BLOCK ==============
 
@@ -146,6 +158,8 @@ def ConvertCircuitData(component):
             AppendComponentData(component[i])
         except:
             raise TypeError("Invalid Data Type Entered: " + str(component[i]) + "\n Please Check Circuit")
+        
+    if len(componentData) >= 5: componentData[3] = componentData[3] * (10 ** componentData[4])  # Apply exponent to value
 
     return tuple(componentData)
 
@@ -172,7 +186,7 @@ def GetCircuitComponents(circuit):
     # Removes empty elements from list
     circuitComponents = RemoveEmptyElements(circuitComponents)
 
-    # Sorts the list of tuples by values in nodes 1 and 26
+    # Sorts the list of tuples by values in nodes 1 and 2
     circuitComponents = sorted(circuitComponents, key=lambda x: (x[0], x[1]))
 
     # Checks if there is a connection to the common node, then inserts a 'P' or 'S' to the tuple depending on the connection type
@@ -206,22 +220,14 @@ def UpdateTermData(term, termsList):
         termsList (list): The updated list of all of the terms
     """    
     termValue = float(term.split("=")[1])
-    if "VT" in term:
-        termsList[0] = ('V', termValue)
-    elif "IN" in term:
-        termsList[0] = ('I', termValue)
-    elif "RS" in term:
-        termsList[1] = termValue
-    elif "GS" in term:
-        termsList[1] = 1/termValue
-    elif "RL" in term:
-        termsList[2] = termValue
-    elif "Fstart" in term:
-        termsList[3] = termValue
-    elif "Fend" in term:
-        termsList[4] = termValue
-    elif "Nfreqs" in term:
-        termsList[5] = termValue
+    if "VT" in term:        termsList[0] = ('V', termValue)
+    elif "IN" in term:      termsList[0] = ('I', termValue)
+    elif "RS" in term:      termsList[1] = termValue
+    elif "GS" in term:      termsList[1] = 1/termValue
+    elif "RL" in term:      termsList[2] = termValue
+    elif "Fstart" in term:  termsList[3] = termValue
+    elif "Fend" in term:    termsList[4] = termValue
+    elif "Nfreqs" in term:  termsList[5] = termValue
     else: raise ValueError("Invalid Entry: " + str(term) + "\n Please Check Circuit")   # Throw an error if an undetected term is entered
     return termsList
 
@@ -429,80 +435,92 @@ def CalculateMatrix(circuitComponents, angularFrequency):
         connectionType = individualComponent[0]
         componentType = individualComponent[1]
         componentValue = individualComponent[2]
-
-        if len(individualComponent) >= 4: componentValue = componentValue ** individualComponent[3]  # Apply the exponent to component value if exponent exists
-
-        # Maybe make an exception to prevent components with a value of 0 from trigerring the program
         if   componentType == "R": impedance = componentValue
         elif componentType == "G": impedance = 1/componentValue
         elif componentType == "L": impedance = 1j*angularFrequency*componentValue
         elif componentType == "C": impedance = 1/(1j*angularFrequency*componentValue)
     
-        if impedance != 0:                                                      
+        if impedance != 0:                                                     
             componentMatrix = GetComponentMatrix(impedance, connectionType)
             ABCDMatrix = np.matmul(ABCDMatrix, componentMatrix)
 
     return ABCDMatrix
 
+def ConvertToDecibel(value, outputVariable):
+    if ("P" in outputVariable) or ("p" in outputVariable):
+        return 10*cmath.log10(abs(value))
+    return 20*cmath.log10(abs(value))
+
 # ============================== FILE WRITING ==============================
 
 def WriteDataToFile(file, outputTerms, outputs):
+    """
+    Writes the output data into the .csv file given that the file is open for editing. This function also converts the value into decibels and polar form when stated.
+    outputTerm lists are laid out as: (Output Index, Variable Name, Variable Unit, Decibel Boolean, Exponent)
+
+    Supporting Mathematics are linked below:
+    
+    Converting complex numbers to magnitude in dB and phase in rads: https://www.rohde-schwarz.com/uk/faq/converting-the-real-and-imaginary-numbers-to-magnitude-in-db-and-phase-in-degrees-faq_78704-30465.html
+        
+    Conversion to decibels: https://dspillustrations.com/pages/posts/misc/decibel-conversion-factor-10-or-factor-20.html#:~:text=The%20dB%20is%20calculated%20via,amplitude%2C%20the%20factor%20is%2020.
+
+    Args:
+        file (_io.TextIOWrapper): This is the file that will be read
+        outputTerms (list): list of all of the output terms. This is a list of lists
+        outputs (list): list of all of the output values
+    """    
+    decibelValue = 0
     for outputTerm in outputTerms:
         outputIndex = outputTerm[0]
-        realPart = str(np.real(outputs[outputIndex]))
-        imaginaryPart = str(np.imag(outputs[outputIndex]))
+        outputs[outputIndex] = outputs[outputIndex] / (10 ** outputTerm[4])
 
-        file.write("," + realPart + "," + imaginaryPart)
+        # Checks if the value is read in decibels
+        if (outputTerm[3]):
+            decibelValue = ConvertToDecibel(outputs[outputIndex], outputTerm[1])
+            firstPart = str(np.real(decibelValue))
+            secondPart = str(np.angle(outputs[outputIndex]))
+        else:
+            firstPart = str(np.real(outputs[outputIndex]))
+            secondPart = str(np.imag(outputs[outputIndex]))
 
-        
+        file.write("," + firstPart + "," + secondPart)
 
 # =========================================== MAIN CODE ===========================================
 def main():
     # File Reading Section
-    fileName = "a_Test_Circuit_1"
+    fileName = "Ext_a_Test_Circuit_1"
     fileDirectoryAndName = "TestFiles/" + fileName + ".net"
     with open(fileDirectoryAndName, 'r') as file:
         text = RemoveComments(file)
 
-        circuitText = ExtractBlock(text, "<CIRCUIT>", "</CIRCUIT>")
-        termsText = ExtractBlock(text, "<TERMS>", "</TERMS>")
-        outputText = ExtractBlock(text, "<OUTPUT>", "</OUTPUT>")
+    print("READING FILE")
+    circuitText = ExtractBlock(text, "<CIRCUIT>", "</CIRCUIT>")
+    termsText = ExtractBlock(text, "<TERMS>", "</TERMS>")
+    outputText = ExtractBlock(text, "<OUTPUT>", "</OUTPUT>")
 
     circuitComponents = GetCircuitComponents(circuitText)
     inputSource, sourceImpedance, loadImpedance, startFrequency, endFrequency, numberOfFrequencies = GetTerms(termsText)
     outputTerms = GetOutputOrder(outputText)
 
-
-    circuitOutputs = [0] * 12   # Initialise a list of 12 zeros
-    outputMatrix = np.array([[0],
-                             [0]])
-
-    outputValues = {
-        "inputVoltage": 0,
-        "outputVoltage": 0,
-        "inputCurrent": 0,
-        "outputCurrent": 0,
-        "inputPower": 0,
-        "outputPower": 0,
-        "inputImpedance": 0,
-        "outputImpedance": 0,
-        "voltageGain": 0,
-        "currentGain": 0,
-        "powerGain": 0,
-        "transmittance": 0,
-    }
-
-    # Data Processing Section
-    frequencies = np.linspace(int(startFrequency), int(endFrequency), int(numberOfFrequencies))
+    outputValues = {"inputVoltage": 0, "outputVoltage": 0, "inputCurrent": 0, "outputCurrent": 0, "inputPower": 0, "outputPower": 0, "inputImpedance": 0, "outputImpedance": 0,
+        "voltageGain": 0, "currentGain": 0, "powerGain": 0, "transmittance": 0,}
 
     # Write to the file
     with open(fileName + ".csv", 'w') as file:
         file.write("Freq")
         for outputTerm in outputTerms:
-            file.write(",Re(" + outputTerm[1] + "),Im(" + outputTerm[1] + ")")
+            if (outputTerm[3]): file.write(",|" + outputTerm[1] + "|,/_" + outputTerm[1])
+            else:               file.write(",Re(" + outputTerm[1] + "),Im(" + outputTerm[1] + ")")
         file.write("\n Hz")
         for outputTerm in outputTerms:
-            file.write("," + outputTerm[2] + "," + outputTerm[2])        
+            if (outputTerm[3]): file.write("," + outputTerm[2] + ",Rads")   
+            else:               file.write("," + outputTerm[2] + "," + outputTerm[2])    
+    
+    print("PROCESSING DATA")
+
+    # Data Processing Section
+    #frequencies = np.linspace(int(startFrequency), int(endFrequency), int(numberOfFrequencies))
+    frequencies = np.logspace(1, 7, 10)
 
     for frequency in frequencies:
         ABCDMatrix = CalculateMatrix(circuitComponents, 2*math.pi*frequency)
@@ -522,7 +540,7 @@ def main():
         if "V" in inputSource[0]:
             outputValues["inputVoltage"] = inputSource[1] * (outputValues["inputImpedance"] / (sourceImpedance + outputValues["inputImpedance"]))
             outputValues["inputCurrent"] = outputValues["inputVoltage"] / outputValues["inputImpedance"]
-        else: # Test this later
+        else:
             outputValues["inputCurrent"] = inputSource[1] * (sourceImpedance / (sourceImpedance + outputValues["inputImpedance"]))
             outputValues["inputVoltage"] = outputValues["inputCurrent"] * outputValues["inputImpedance"]    
         
@@ -530,12 +548,13 @@ def main():
         outputValues["outputVoltage"] = outputValues["inputVoltage"] * outputValues["voltageGain"]
         outputValues["outputCurrent"] = outputValues["inputCurrent"] * outputValues["currentGain"]
         outputValues["outputPower"] = outputValues["outputVoltage"] * np.conj(outputValues["outputCurrent"])
-
+        print(outputValues["inputImpedance"])
         # File Writing
         with open(fileName + ".csv", 'a') as file:
             file.write("\n"+str(frequency))
             WriteDataToFile(file, outputTerms, list(outputValues.values()))
         
+    print("WRITING DATA")
 
 if __name__ == "__main__":
     main()
