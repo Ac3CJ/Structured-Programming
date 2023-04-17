@@ -4,9 +4,7 @@
 # 3. Maybe consider what happens when there are two parallel components
 #    connected in series between two nodes (not including common node)
 # 12. Find a way to make the printing of output terms O(n) instead of O(n^2)
-# 17. Make the maths more readable
-# 18. Sort out logarithmic sweep
-# 19. Figure out why the maths is wrong for Ext_a_Test_Circuit_1
+# 19. Figure out why the maths is wrong Ext_a_Test_Circuit_1 for Pout only
 
 # =========================================== ERROR HANDLING NOTES ===========================================
 # 1. Check if the blocks exist, this should throw the right error
@@ -19,11 +17,14 @@
 # 8. Check for spaces between the equals and value
 # 9. Check for spaces between dB and unit. For example: dB m V
 # 10. Check for incorrect naming for variables in file
+# 11. Check if the graph input is within range for file.
 
 # =========================================== LIBRARIES ===========================================
 import numpy as np
 import math
 import cmath
+import pandas as pd
+from matplotlib import pyplot as plt
 
 # =========================================== SUBROUTINES ===========================================
 
@@ -203,6 +204,9 @@ def GetCircuitComponents(circuit):
     return circuitComponents
 
 # ============== TERMS BLOCK ==============
+def CheckLogarithmicSweep(term):
+    if "L" in term: return True
+    return False
 
 def UpdateTermData(term, termsList):
     """
@@ -225,8 +229,12 @@ def UpdateTermData(term, termsList):
     elif "RS" in term:      termsList[1] = termValue
     elif "GS" in term:      termsList[1] = 1/termValue
     elif "RL" in term:      termsList[2] = termValue
-    elif "Fstart" in term:  termsList[3] = termValue
-    elif "Fend" in term:    termsList[4] = termValue
+    elif "Fstart" in term:  
+        termsList[3] = termValue
+        termsList[6] = CheckLogarithmicSweep(term)
+    elif "Fend" in term:    
+        termsList[4] = termValue
+        termsList[6] = CheckLogarithmicSweep(term)
     elif "Nfreqs" in term:  termsList[5] = termValue
     else: raise ValueError("Invalid Entry: " + str(term) + "\n Please Check Circuit")   # Throw an error if an undetected term is entered
     return termsList
@@ -254,6 +262,7 @@ def ConvertTerms(termLine, termsList):
     for i in range(0, len(terms)):
         try:
             termsList = UpdateTermData(terms[i],termsList)
+
         except:
             raise TypeError("Invalid Data Type Entered: " + str(terms[i]) + "\n Please Check Circuit")  # Throw an error if an invalid entry is inputted
     return termsList
@@ -263,7 +272,7 @@ def GetTerms(terms):
     Gets the value of the terms and unpacks them into a list. The terms text is split into it's separate lines, then each line is converted into a float or string
     
     The order of the terms in the termsList is:
-        [inputSource, sourceImpedance, loadImpedance, startFrequency, endFrequency, numberOfFrequencies]
+        [inputSource, sourceImpedance, loadImpedance, startFrequency, endFrequency, numberOfFrequencies, Logarithmic Sweep Boolean]
 
     inputSource is laid out as:
         (sourceType, sourceValue)
@@ -275,7 +284,7 @@ def GetTerms(terms):
         termsList (List): List of each term and the value of them
     """    
     termsLines = terms.split("\n")
-    termsList = [("", 0), 0, 0, 0, 0, 0]
+    termsList = [("", 0), 0, 0, 0, 0, 0, False]
 
     for i in range(0, len(termsLines)):
         if not (termsLines[i] == ""):
@@ -447,8 +456,7 @@ def CalculateMatrix(circuitComponents, angularFrequency):
     return ABCDMatrix
 
 def ConvertToDecibel(value, outputVariable):
-    if ("P" in outputVariable) or ("p" in outputVariable):
-        return 10*cmath.log10(abs(value))
+    if ("P" in outputVariable) or ("p" in outputVariable):  return 10*cmath.log10(abs(value))
     return 20*cmath.log10(abs(value))
 
 # ============================== FILE WRITING ==============================
@@ -499,7 +507,7 @@ def main():
     outputText = ExtractBlock(text, "<OUTPUT>", "</OUTPUT>")
 
     circuitComponents = GetCircuitComponents(circuitText)
-    inputSource, sourceImpedance, loadImpedance, startFrequency, endFrequency, numberOfFrequencies = GetTerms(termsText)
+    inputSource, sourceImpedance, loadImpedance, startFrequency, endFrequency, numberOfFrequencies, logarithmicSweepBoolean = GetTerms(termsText)
     outputTerms = GetOutputOrder(outputText)
 
     outputValues = {"inputVoltage": 0, "outputVoltage": 0, "inputCurrent": 0, "outputCurrent": 0, "inputPower": 0, "outputPower": 0, "inputImpedance": 0, "outputImpedance": 0,
@@ -519,10 +527,12 @@ def main():
     print("PROCESSING DATA")
 
     # Data Processing Section
-    #frequencies = np.linspace(int(startFrequency), int(endFrequency), int(numberOfFrequencies))
-    frequencies = np.logspace(1, 7, 10)
+    # For logspace, apply a log function to the frequencies so that the values are the base of the exponent
+    if (logarithmicSweepBoolean == True): frequencies = np.logspace(math.log10(startFrequency), math.log10(endFrequency), int(numberOfFrequencies))
+    else: frequencies = np.linspace(startFrequency, endFrequency, int(numberOfFrequencies))
 
     for frequency in frequencies:
+        # Creating the Matrices
         ABCDMatrix = CalculateMatrix(circuitComponents, 2*math.pi*frequency)
 
         A_C = ABCDMatrix[0, 0]
@@ -530,6 +540,7 @@ def main():
         C_C = ABCDMatrix[1, 0]
         D_C = ABCDMatrix[1, 1]
 
+        # Calculating all of the values
         outputValues["inputImpedance"] = (A_C * loadImpedance + B_C) / (C_C * loadImpedance + D_C)
         outputValues["outputImpedance"] = (D_C * sourceImpedance + B_C) / (C_C * sourceImpedance + A_C)
         outputValues["voltageGain"] = loadImpedance / (A_C * loadImpedance + B_C)
@@ -548,13 +559,21 @@ def main():
         outputValues["outputVoltage"] = outputValues["inputVoltage"] * outputValues["voltageGain"]
         outputValues["outputCurrent"] = outputValues["inputCurrent"] * outputValues["currentGain"]
         outputValues["outputPower"] = outputValues["outputVoltage"] * np.conj(outputValues["outputCurrent"])
-        print(outputValues["inputImpedance"])
+
         # File Writing
         with open(fileName + ".csv", 'a') as file:
             file.write("\n"+str(frequency))
             WriteDataToFile(file, outputTerms, list(outputValues.values()))
         
     print("WRITING DATA")
+
+    # Output Graphs
+    userColumns = [2, 7, 4]
+    graphCols = [0,] + userColumns
+    outputData = pd.read_csv(fileName + ".csv", skiprows=[0, 1], usecols=graphCols)
+    for i in range(0, len(graphCols)-1):
+        outputData.plot(0, i+1)
+        plt.savefig(fileName + "_" + str(graphCols[i+1]) + ".png")
 
 if __name__ == "__main__":
     main()
