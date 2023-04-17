@@ -11,8 +11,8 @@
 # 3. Check if there are no source blocks
 # 4. Check for illegal node connections n1=1 n2=5 etc.
 # 5. Check for nonsense data in the .NET file, like non commented parts
-# 6. Check for when there is no closing delimeter
-# 7. Check for when there is no opening delimeter
+# 6. Check for when there is no closing delimeter DONE
+# 7. Check for when there is no opening delimeter DONE
 # 8. Check for spaces between the equals and value
 # 9. Check for spaces between dB and unit. For example: dB mV
 # 10. Check for incorrect naming for variables in file    DONE
@@ -20,7 +20,8 @@
 # 12. Check if the same graph is being outputted    DONE
 # 13. Check if there are uncommented comments, decide if the program should stop or ignore it
 # 14. Check for missing variable in circuit block
-# 15. 
+# 15. Check for different node values like n3, n4, etc.
+# 16. 
 
 # =================================================================================================
 # =========================================== LIBRARIES ===========================================
@@ -83,7 +84,7 @@ def ExtractBlock(text, start, end):
     Returns:
         text (str): Text between the start and end delimiters
     """
-    if not ((start in text) or (end in text)): raise ValueError(start + " block is missing")
+    if ((not start in text) or (not end in text)): raise ValueError(start + " block is missing")
     return text[text.find(start)+len(start):text.rfind(end)]     
 
 def RemoveEmptyElements(list0):
@@ -584,6 +585,7 @@ def main():
     userColumns = RemoveRepeatElements(userColumns)
 
     # File Reading and Error Handling
+    print("READING FILE")
     try:
         with open(netFileName, 'r') as file:
             text = RemoveComments(file)
@@ -593,7 +595,6 @@ def main():
     if not (".net" in netFileName): raise OSError("File extension is invalid: " + netFileName)
     elif not (".csv" in csvFileName): raise OSError("File extension is invalid: " + csvFileName)
 
-    print("READING FILE")
     circuitText = ExtractBlock(text, "<CIRCUIT>", "</CIRCUIT>")
     termsText = ExtractBlock(text, "<TERMS>", "</TERMS>")
     outputText = ExtractBlock(text, "<OUTPUT>", "</OUTPUT>")
@@ -673,4 +674,4 @@ def main():
             plt.savefig(pngFileName + "_" + str(graphColumns[i+1]) + ".png")
 
 if __name__ == "__main__":  # Allows code to be run as a script, but not when imported as a module. This is the top file
-    main()      # Passes in the arguments except for the script name
+    main()
