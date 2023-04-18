@@ -3,12 +3,13 @@
 # outputTerms tuples are ordered as: (Output Index, Variable Name, Variable Unit, Decibel Boolean, Exponent)
 # 3. Maybe consider what happens when there are two parallel components
 #    connected in series between two nodes (not including common node)
+# 4. Change the Exception test for CheckComponentType and also test that bitch
 # 19. Figure out why the maths is wrong Pout only
 
 # =========================================== ERROR HANDLING NOTES ===========================================
 # 1. Check if the blocks exist, this should throw the right error DONE
-# 2. Check if the blocks are empty
-# 3. Check if there are no source blocks
+# 2. Check if the blocks are empty DONE
+# 3. Check if there are no source components
 # 4. Check for illegal node connections n1=1 n2=5 etc.
 # 5. Check for nonsense data in the .NET file, like non commented parts
 # 6. Check for when there is no closing delimeter DONE
@@ -20,15 +21,18 @@
 # 12. Check if the same graph is being outputted    DONE
 # 13. Check if there are uncommented comments, decide if the program should stop or ignore it
 # 14. Check for missing variable in circuit block
-# 15. Check for different node values like n3, n4, etc.
-# 16. 
+# 15. Check if both Fstart and Fend have an L or not
+# 16. When resistance or inductance is 0 when parallel, and conductance or capacitance 0
+# 17. Check for other component type letters, "A", "E", "P", etc. DONE
+
+# NOTE TO SELF: WHEN WRITING THE FILE, PUT COMMA BEFORE THE DATA POINT
 
 # =================================================================================================
 # =========================================== LIBRARIES ===========================================
 # =================================================================================================
 
 import numpy as np
-import math, sys, getopt, cmath, re
+import math, sys, getopt, cmath, re, warnings
 import pandas as pd
 from matplotlib import pyplot as plt
 
@@ -36,9 +40,25 @@ from matplotlib import pyplot as plt
 # =========================================== SUBROUTINES ===========================================
 # ===================================================================================================
 
+# ============================== ERROR HANDLING ==============================
+
+def ErrorRaiseCommandLineEntry(systemArguments=[]):
+    raise SyntaxError("Invalid entry: " + ' '.join(systemArguments) +
+                                              "\n Example Entries:\n python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]\n python CascadeCircuit.py input.net output.csv")
+
+def ErrorRaiseEmptyBLock(block=""):
+    raise ValueError("Empty Block Detected! Check: " + block + " Block")
+
+def ErrorRaiseUnknownVariable(variable=""):
+    raise ValueError("Unknown Variable Found: " + variable)
+
 # ======================== READING AND ORGANISING DATA ========================
 
 # ============== GENERAL ==============
+
+def CheckEmptyListError(myList, block="UNDEFINED"):
+    if (len(myList) <= 0): ErrorRaiseEmptyBLock(block)
+    return
 
 def RemoveRepeatElements(myList):
     """
@@ -64,8 +84,8 @@ def RemoveComments(file):
     """
     text = ""
     for line in file:
-        if not (line.startswith('#')):     # Checks if the line doesn't start with a #
-            text += line
+        # Checks if the line doesn't start with a #
+        if not (line.startswith('#')): text += line
     return text
 
 def ExtractBlock(text, start, end):
@@ -84,10 +104,10 @@ def ExtractBlock(text, start, end):
     Returns:
         text (str): Text between the start and end delimiters
     """
-    if ((not start in text) or (not end in text)): raise ValueError(start + " block is missing")
+    if not ((start in text) or (end in text)): raise ValueError(start + " block is missing")
     return text[text.find(start)+len(start):text.rfind(end)]     
 
-def RemoveEmptyElements(list0):
+def RemoveEmptyElements(myList):
     """
     Removes empty elements from a list
 
@@ -97,9 +117,9 @@ def RemoveEmptyElements(list0):
     Returns:
         list: New list without empty elements
     """    
-    return list(filter(None, list0))
+    return list(filter(None, myList))
 
-def ExtractExponent(prefix):
+def ExtractExponent(prefix=""):
     """
     Extracts the exponent from the prefix of the units for each variable. This is a case statement to set the exponent for each variable.
 
@@ -118,11 +138,13 @@ def ExtractExponent(prefix):
     elif "k" in prefix:  return 3
     elif "M" in prefix:  return 6
     elif "G" in prefix:  return 9
-    else: return 0
+    else: 
+        warnings.warn("WARNING: No or unknown prefix.\n Defaulting to 0", UserWarning)
+        return 0
 
 # ============== CIRCUIT BLOCK ==============
 
-def CheckComponentType(data):
+def CheckComponentType(data=""):
     """
     Checks for the component type of the component
 
@@ -133,13 +155,14 @@ def CheckComponentType(data):
         Boolean: Will return True if the data includes the component type, False if it is node data
     """    
     if ('R' in data) or ('G' in data) or ('C' in data) or ('L' in data): return True
-    return False
-
+    elif ('n1' in data) or ('n2' in data): return False
+    else: ErrorRaiseUnknownVariable(data)
+    
 def ConvertCircuitData(component):
     """
     Converts the component data from str into a tuple that contains the relevant data.
 
-    Tuple is in the form: (node 1, node 2, component type, component value)
+    Tuple is in the form: (node 1, node 2, component type, component value, exponent)
 
     Nested Functions:
         AssignComponentData(arg1): Used to assign correct component data
@@ -164,23 +187,22 @@ def ConvertCircuitData(component):
             componentData.append(ExtractExponent(data))
             return
         
-        if (CheckComponentType(data)):
-            componentData.append(data.split("=")[0])
+        if (CheckComponentType(data)): componentData.append(data.split("=")[0])
 
         value = float(data.split("=")[1])
         componentData.append(value)
     
-    component = component.split(" ")
+    componentTermList = component.split(" ")
     componentData = []
 
-    for i in range(0, len(component)):
+    for term in componentTermList:
         try:
-            AppendComponentData(component[i])
+            AppendComponentData(term)
         except:
-            raise TypeError("Invalid Data Type Entered: " + str(component[i]) + "\n Please Check Circuit")
+            raise ValueError("Invalid Data Entered: " + term + "\n Please Check Circuit")
         
     if len(componentData) >= 5: componentData[3] = componentData[3] * (10 ** componentData[4])  # Apply exponent to value
-
+    print(componentData)
     return tuple(componentData)
 
 def GetCircuitComponents(circuit):
@@ -211,10 +233,8 @@ def GetCircuitComponents(circuit):
 
     # Checks if there is a connection to the common node, then inserts a 'P' or 'S' to the tuple depending on the connection type
     for i in range(0, len(circuitComponents)):
-        if (circuitComponents[i].count(0) != 0): 
-            circuitComponents[i] = ('P',) + circuitComponents[i]       
-        else:
-            circuitComponents[i] = ('S',) + circuitComponents[i]
+        if (circuitComponents[i].count(0) != 0): circuitComponents[i] = ('P',) + circuitComponents[i]       
+        else: circuitComponents[i] = ('S',) + circuitComponents[i]
 
     # Removes the node data from the circuitComponents tuples as they are no longer needed
     for i in range(0, len(circuitComponents)):
@@ -290,7 +310,6 @@ def ConvertTerms(termLine, termsList):
     for i in range(0, len(terms)):
         try:
             termsList = UpdateTermData(terms[i],termsList)
-
         except:
             raise TypeError("Invalid Data Type Entered: " + str(terms[i]) + "\n Please Check Circuit")  # Throw an error if an invalid entry is inputted
     return termsList
@@ -312,7 +331,10 @@ def GetTerms(terms):
         termsList (List): List of each term and the value of them
     """    
     termsLines = terms.split("\n")
+    termsLines = RemoveEmptyElements(termsLines)
     termsList = [("", 0), 0, 0, 0, 0, 0, False]
+
+    CheckEmptyListError(termsLines, "TERMS")
 
     for i in range(0, len(termsLines)):
         if not (termsLines[i] == ""):
@@ -372,7 +394,6 @@ def InsertOutputIndex(outputVariable):
     elif "Ai" in outputVariable:    return 9
     elif "Ap" in outputVariable:    return 10
     elif "T" in outputVariable:     return 11
-    
 
     raise Exception("Invalid Output Variable: " + str(outputVariable)) # Raise an error if an unknown output unit is entered
 
@@ -389,7 +410,7 @@ def ConvertOutputs(outputLine):
     Returns:
         output (tuple): Tuple containing the relevant data for each output variable
     """    
-    output = outputLine.split(" ")
+    output = re.split("\s", outputLine, 1)  # Split on first white space
     if len(output) < 2: output.append("L")
 
     output.insert(0, InsertOutputIndex(output[0]))
@@ -414,9 +435,8 @@ def GetOutputOrder(outputs):
     outputTerms = []
 
     for i in range(0, len(outputLines)):
-        if not (outputLines[i] == ""):
-            outputTerms.append(ConvertOutputs(outputLines[i].strip()))  # .strip() added to the end to remove trailing spaces
-    
+        if not (outputLines[i] == ""): outputTerms.append(ConvertOutputs(outputLines[i].strip()))  # .strip() added to the end to remove trailing spaces
+        
     # Removes empty elements from list
     outputTerms = RemoveEmptyElements(outputTerms)
     return outputTerms
@@ -444,7 +464,6 @@ def GetComponentMatrix(impedance, connectionType):
     elif connectionType == "P":
         matrix = np.array([[1, 0],
                            [1/impedance, 1]])
-
     return matrix
 
 def CalculateMatrix(circuitComponents, angularFrequency):
@@ -472,6 +491,7 @@ def CalculateMatrix(circuitComponents, angularFrequency):
         connectionType = individualComponent[0]
         componentType = individualComponent[1]
         componentValue = individualComponent[2]
+
         if   componentType == "R": impedance = componentValue
         elif componentType == "G": impedance = 1/componentValue
         elif componentType == "L": impedance = 1j*angularFrequency*componentValue
@@ -554,31 +574,38 @@ def main():
     # python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]
     graphParameters = "1"           # String of 1 to initialise the data
     graphBoolean = False
+    options = [] 
+    arguments = []
 
     # Sets the netFileName and csvFileName to the first and second entries of the systemArguments, this gets overwritten if the user enters the file for a graph
     netFileName = systemArguments[0]
     if len(systemArguments) > 1: csvFileName = systemArguments[1]
+    else: ErrorRaiseCommandLineEntry(systemArguments)
+
     # Reading System Inputs
     try:
         options, arguments = getopt.getopt(systemArguments,"hi:p:")
     except getopt.GetoptError:
-        print('Input invalid! Input line as: test.py -i <inputfile> -p <parameter>')
+        print('Input invalid! Input line as: CascadeCircuit.py -i <inputfile> -p <parameter>')
         sys.exit(2)
 
-    for option, argument in options:
-        if option == '-h':
+    for optionAndArgument in options:
+        if len(optionAndArgument) > 2: ErrorRaiseCommandLineEntry(systemArguments) 
+        if optionAndArgument[0] == '-h':
             print ('test.py -i <inputfile> -p <parameter>')
             sys.exit()
-        elif option in ("-i", "--ifile"):
-            netFileName = argument + ".net"
-            csvFileName = argument + ".csv"
-            pngFileName = argument
-        elif option in ("-p", "--param"):
-            graphParameters = argument
+        elif optionAndArgument[0] in ("-i", "--ifile"):
+            netFileName = optionAndArgument[1] + ".net"
+            csvFileName = optionAndArgument[1] + ".csv"
+            pngFileName = optionAndArgument[1]
+        elif optionAndArgument[0] in ("-p", "--param"):
+            graphParameters = optionAndArgument
             graphBoolean = True
 
+    if not (".net" in netFileName): raise OSError("File extension is invalid: " + netFileName)
+    if not (".csv" in csvFileName): raise OSError("File extension is invalid: " + csvFileName)
+
      # Arguments should be empty in this case, when it is full, then the command line prompt is written incorrectly
-    if len(arguments) > 0: raise SyntaxError("Invalid entry: " + ''.join(systemArguments) + "    Example Entry: python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]")
 
     userColumns= re.findall(r'\d+', graphParameters)    # Use REGEX to extract all numbers
     userColumns = [int(i) for i in userColumns]         # Convert the strings into integers
@@ -592,16 +619,21 @@ def main():
     except:
         raise FileNotFoundError("No file or directory: '" + netFileName + "'")
 
-    if not (".net" in netFileName): raise OSError("File extension is invalid: " + netFileName)
-    elif not (".csv" in csvFileName): raise OSError("File extension is invalid: " + csvFileName)
-
     circuitText = ExtractBlock(text, "<CIRCUIT>", "</CIRCUIT>")
     termsText = ExtractBlock(text, "<TERMS>", "</TERMS>")
     outputText = ExtractBlock(text, "<OUTPUT>", "</OUTPUT>")
 
+    if (circuitText == "") or (termsText == "") or (outputText == ""): raise ValueError("Empty Block Detected!\n Check file: " + netFileName)
+
+    print("\n READING CIRCUIT BLOCK \n")
     circuitComponents = GetCircuitComponents(circuitText)
+    print("\n READING TERMS BLOCK \n")
     inputSource, sourceImpedance, loadImpedance, startFrequency, endFrequency, numberOfFrequencies, logarithmicSweepBoolean = GetTerms(termsText)
+    print("\n READING OUTPUT BLOCK \n")
     outputTerms = GetOutputOrder(outputText)
+
+    CheckEmptyListError(circuitComponents, "CIRCUIT")
+    CheckEmptyListError(outputTerms, "OUTPUT")
 
     # Check if the entered maximum column, the user entered is greater than the output terms or less than equal to 0
     if (len(outputTerms) < max(userColumns)) or (min(userColumns) <= 0): raise IndexError("Column " + str(max(userColumns)) + 
@@ -657,7 +689,7 @@ def main():
         outputValues["outputCurrent"] = outputValues["inputCurrent"] * outputValues["currentGain"]
         #outputValues["outputPower"] = outputValues["inputPower"] * outputValues["powerGain"]
         outputValues["outputPower"] = outputValues["outputVoltage"] * np.conj(outputValues["outputCurrent"])
-
+        
         # File Writing
         with open(csvFileName, 'a') as file:
             file.write("\n"+FormatNumber(frequency))
@@ -674,4 +706,4 @@ def main():
             plt.savefig(pngFileName + "_" + str(graphColumns[i+1]) + ".png")
 
 if __name__ == "__main__":  # Allows code to be run as a script, but not when imported as a module. This is the top file
-    main()
+    main()      # Passes in the arguments except for the script name
