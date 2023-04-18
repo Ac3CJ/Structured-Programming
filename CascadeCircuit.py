@@ -4,7 +4,7 @@
 # 3. Maybe consider what happens when there are two parallel components
 #    connected in series between two nodes (not including common node)
 # 4. Change the Exception test for CheckComponentType and also test that bitch
-# 19. Figure out why the maths is wrong Pout only
+# 19. Figure out why the maths is wrong Pout only SORTED
 
 # =========================================== ERROR HANDLING NOTES ===========================================
 # 1. Check if the blocks exist, this should throw the right error DONE
@@ -14,7 +14,7 @@
 # 5. Check for nonsense data in the .NET file, like non commented parts
 # 6. Check for when there is no closing delimeter DONE
 # 7. Check for when there is no opening delimeter DONE
-# 8. Check for spaces between the equals and value
+# 8. Check for spaces between the equals and value  DONE
 # 9. Check for spaces between dB and unit. For example: dB mV
 # 10. Check for incorrect naming for variables in file    DONE
 # 11. Check if the graph input is within range for file.    DONE
@@ -55,6 +55,9 @@ def ErrorRaiseUnknownVariable(variable=""):
 # ======================== READING AND ORGANISING DATA ========================
 
 # ============== GENERAL ==============
+
+def MakeNLengthGroups(myList, n):
+    return [myList[x:x+n] for x in range(0, len(myList), n)]
 
 def CheckEmptyListError(myList, block="UNDEFINED"):
     if (len(myList) <= 0): ErrorRaiseEmptyBLock(block)
@@ -183,16 +186,20 @@ def ConvertCircuitData(component):
         Args:
             data (str): String of the split component data, can be connected nodes or component type.
         """        
-        if not ("=" in data):
+        if (len(data) <= 1):
             componentData.append(ExtractExponent(data))
             return
         
-        if (CheckComponentType(data)): componentData.append(data.split("=")[0])
+        if (CheckComponentType(data[0])): componentData.append(data[0])
 
-        value = float(data.split("=")[1])
+        value = float(data[1])
         componentData.append(value)
-    
-    componentTermList = component.split(" ")
+   
+    # Outer Function Code
+    #component = "n1            =   = = = =    =  =10       ,           n2===================================1 R=2 m"
+    component = re.sub(r"[\s,=]+", " ", component.strip())  # Checks for 1 or more occurences of a space, comma, or = then replaces it with a single space
+    componentList = component.split(" ")
+    componentTermList = MakeNLengthGroups(componentList, 2)
     componentData = []
 
     for term in componentTermList:
@@ -222,8 +229,7 @@ def GetCircuitComponents(circuit):
     circuitComponents = []
 
     for line in circuitLines:
-        if not (line == ""):
-            circuitComponents.append(ConvertCircuitData(line))
+        if not (line == ""): circuitComponents.append(ConvertCircuitData(line))
         
     # Removes empty elements from list
     circuitComponents = RemoveEmptyElements(circuitComponents)
@@ -570,8 +576,11 @@ def WriteDataToFile(file, outputTerms, outputs):
 # =================================================================================================
 
 def main():
-    systemArguments = sys.argv[1:]
+    #systemArguments = sys.argv[1:]
+    #sys.argv = ["a_Test_Circuit_1.net", "test.csv"]
     # python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]
+    systemArguments = ["a_Test_Circuit_1.net", "test.csv"]
+
     graphParameters = "1"           # String of 1 to initialise the data
     graphBoolean = False
     options = [] 
@@ -706,4 +715,18 @@ def main():
             plt.savefig(pngFileName + "_" + str(graphColumns[i+1]) + ".png")
 
 if __name__ == "__main__":  # Allows code to be run as a script, but not when imported as a module. This is the top file
-    main()      # Passes in the arguments except for the script name
+    #main()     
+    component = "R=1.59e3 m n1 = 10 n2===========   ========================1 "   # Find where the number and character meet, insert a space
+    
+    # Checks if there is a number followed by a character and that there is not a scientific number present
+    scientific = re.search(r"[0-9]+e\s*-?[0-9]+", component)
+    component = list(component)
+    component.insert(scientific.span()[0], "")
+    print(scientific)
+    if ((re.findall(r"[0-9]+[(a-zA-Z)]+", component)) and (len(scientific.match()) < 1)): raise ValueError("Invalid Entry:\n" + component)
+
+    component = re.sub(r"[\s,=]+", " ", component.strip())  # Checks for 1 or more occurences of a space, comma, or = then replaces it with a single space
+    componentList = component.split(" ")
+    componentTermList = MakeNLengthGroups(componentList, 2)
+    #if (len(componentTermList) < )
+    print(componentList)
