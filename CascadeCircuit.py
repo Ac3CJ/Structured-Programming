@@ -1,5 +1,6 @@
 # =========================================== NOTE TO SELF ===========================================
 # outputTerms tuples are ordered as: (Output Index, Variable Name, Variable Unit, Decibel Boolean, Exponent)
+# WHEN WRITING THE FILE, PUT COMMA BEFORE THE DATA POINT
 
 # =========================================== ERROR HANDLING NOTES ===========================================
 # 1. Check if the blocks exist, this should throw the right error DONE
@@ -23,7 +24,7 @@
 # 19. Check when there are multiple values with the same nodes if they are in series DONE
 # 20. Check for discontinued circuits: n1=1 n2=2 R=10       n1=3 n2=4 C=1e-6    DONE
 
-# NOTE TO SELF: WHEN WRITING THE FILE, PUT COMMA BEFORE THE DATA POINT
+# NOTE TO SELF: 
 
 # =================================================================================================
 # =========================================== LIBRARIES ===========================================
@@ -33,6 +34,7 @@ import numpy as np
 import math, sys, getopt, cmath, re, warnings
 import pandas as pd
 from matplotlib import pyplot as plt
+#import FileReading as fr
 
 # ===================================================================================================
 # =========================================== SUBROUTINES ===========================================
@@ -77,19 +79,6 @@ def CleanTextLine(text):
     text = re.sub(r"[\s,]*=[\s,=]*", "=", text)     # Checks for zero or more occurences of a space or comma followed by an "=", then zero or more occurences of space, comma, "="
     return text
 
-def MakeNLengthGroups(myList, n):
-    """
-    Takes a list and creates sublists of the elements of length n. This allows for odd pairings as well.
-
-    Args:
-        myList (list): List to be split into sublists
-        n (int): number of elements in each sublist
-
-    Returns:
-        list: A list that contains the sublists
-    """    
-    return [myList[x:x+n] for x in range(0, len(myList), n)]
-
 def CheckEmptyListError(myList, block="UNDEFINED"):
     """
     Checks if the list for a block is empty and throws an error 
@@ -100,18 +89,6 @@ def CheckEmptyListError(myList, block="UNDEFINED"):
     """    
     if (len(myList) <= 0): raise ValueError("Empty Block Detected! Check: " + block + " Block")
     return
-
-def RemoveRepeatElements(myList):
-    """
-    Removes repeat elements from the list. Creates a dictionary using the list items as keys then makes the dictionary into a list
-
-    Args:
-        myList (list): List to remove repeat elements from
-
-    Returns:
-        list: List with removed repeat elements
-    """    
-    return list(dict.fromkeys(myList))
 
 def RemoveComments(file):
     """
@@ -433,7 +410,7 @@ def GetTerms(terms):
     """    
     termsLines = terms.split("\n")
     termsLines = RemoveEmptyElements(termsLines)
-    termsList = [("", 0), 0, 0, 0, 0, 0, False]
+    termsList = ["", "", "", "", "", "", False]
     termsCounter = 0
 
     CheckEmptyListError(termsLines, "TERMS")
@@ -441,9 +418,9 @@ def GetTerms(terms):
     for i in range(0, len(termsLines)):
         if not (termsLines[i] == ""):
             termsList, termsCounter = ConvertTerms(termsLines[i], termsList, termsCounter)
-
+    if "" in termsList: raise ValueError("TERMS Block has a missing term! Check TERMS block.\n" + terms)
     # There are 6 terms, so if the counter is triggered too little or too many times, then the TERMS block is erroneous
-    if termsCounter != 6: raise ValueError("TERMS Block has too many or too little terms! Check TERMS block.\n" + terms)    
+    if termsCounter != 6: raise ValueError("TERMS Block has too many or too little terms! Check TERMS block.\n" + terms)
     return termsList
 
 # ============== OUTPUT BLOCK ==============
@@ -516,8 +493,8 @@ def ConvertOutputs(outputLine):
     Returns:
         output (tuple): Tuple containing the relevant data for each output variable
     """    
-    output = re.split("\s", outputLine, 1)  # Split on first white space
-    if len(output) < 2: output.append("L")  # If the gain has no units, then append an L 
+    output = re.split("\s", outputLine, 1)              # Split on first white space
+    if len(output) < 2: output.append("L")              # If the gain has no units, then append an L 
     output.insert(0, InsertOutputIndex(output[0]))      # Insert the output index to the start of the list
     output.extend(ExtendDecibelAndExponent(output[2]))  # Extend the list with the 
     
@@ -641,9 +618,8 @@ def FormatNumber(value):
     """    
     return  ('{:e}'.format(float('%.4g' % value)))
 
-def WriteDataToFile(file, outputTerms, outputs):
-    """
-    Writes the output data into the .csv file given that the file is open for editing. This function also converts the value into decibels and polar form when stated.
+def WriteDataToFile(file, outputTerms, outputs, fileName, frequency):
+    """Writes the output data into the .csv file given that the file is open for editing. This function also converts the value into decibels and polar form when stated.
     outputTerm lists are laid out as: (Output Index, Variable Name, Variable Unit, Decibel Boolean, Exponent)
 
     Supporting Mathematics are linked below:
@@ -654,10 +630,14 @@ def WriteDataToFile(file, outputTerms, outputs):
 
     Args:
         file (_io.TextIOWrapper): This is the file that will be read
-        outputTerms (list): list of all of the output terms. This is a list of lists
-        outputs (list): list of all of the output values
+        outputTerms (list): List of all of the output terms. This is a list of lists
+        outputs (list): List of all of the output values
+        fileName (str): Name of the file to write to
+        frequency (float): Frequency that is being analysed
     """    
     decibelValue = 0
+    with open(fileName, 'a') as file:
+        file.write("\n"+FormatNumber(frequency))
     for outputTerm in outputTerms:
         outputIndex = outputTerm[0]
         outputs[outputIndex] = outputs[outputIndex] / (10 ** outputTerm[4])
@@ -670,20 +650,63 @@ def WriteDataToFile(file, outputTerms, outputs):
         else:
             firstPart = FormatNumber(np.real(outputs[outputIndex]))
             secondPart = FormatNumber(np.imag(outputs[outputIndex]))
+        with open(fileName, 'a') as file:
+            file.write("," + firstPart + "," + secondPart)
+    return
 
-        file.write("," + firstPart + "," + secondPart)
+def InitialiseFile(fileName, outputTerms):
+    """
+    Initialises the file for writing by filling in the variables and units for each column
+
+    Args:
+        fileName (str): Name of the file to write to
+        outputTerms (list): List of all of the output terms to consider
+    """
+    with open(fileName, 'w') as file:
+        file.write("Freq")
+        for outputTerm in outputTerms:
+            variable, variableUnit, decibleCheck = outputTerm[1:4]                                  # Unpacks the necessary data from the output terms from the list
+            if (decibleCheck): file.write(",|" + str(variable) + "|,/_" + str(variable))            # When there are decibels, write it as modulus as phase
+            else:               file.write(",Re(" + str(variable) + "),Im(" + str(variable) + ")")  # Write as real and imaginary components otherwise
+        file.write("\n Hz")
+        for outputTerm in outputTerms:
+            variable, variableUnit, decibleCheck = outputTerm[1:4]                                  # Unpacks the necessary data from the output terms from the list
+            if (decibleCheck): file.write("," + str(variableUnit) + ",Rads")                        # When in decibels, write in the unit and rads 
+            else:               file.write("," + str(variableUnit) + "," + str(variableUnit))       # Displays the normal units otherwise
+    return
+
+def GenerateGraph(userColumns, inputFile, outputFile):
+    """
+    Generates the graphs for user-stated columns
+
+    Args:
+        userColumns (list): List of the user-stated columns for graph printing
+        inputFile (str): File to read data from
+        outputFile (str): File to print the graph image to
+    """    
+    graphColumns = [0,] + userColumns                                           # Joins the list of user inputs to a 0 to include the frequency
+    outputData = pd.read_csv(inputFile, skiprows=[0, 1], usecols=graphColumns)  # Skip the first 2 rows as they contain the variable and units
+    variables = pd.read_csv(inputFile, nrows=0, usecols=graphColumns)
+    unit = pd.read_csv(inputFile, nrows=1, usecols=graphColumns) 
+    for i in range(1, len(graphColumns)):
+        outputData.plot(0, i)                                                 # Plot with frequency on x axis and other data on y axis
+        plt.xlabel("Frequency / Hz")
+        plt.ylabel(list(variables.keys())[i] + " / " + unit.values[0][i])
+        plt.savefig(outputFile + "_" + str(graphColumns[i]) + ".png")
     return
 
 # =================================================================================================
 # =========================================== MAIN CODE ===========================================
 # =================================================================================================
 # python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]
+# python CascadeCircuit.py a_Test_Circuit_1.net test.csv
 def main():
     systemArguments = sys.argv[1:]
     #systemArguments = ["a_Test_Circuit_1EVIL.net", "test.csv"]
 
     graphParameters = "1"           # String of 1 to initialise the data
     graphBoolean = False
+    fileBoolean = False
     options = [] 
     arguments = []
 
@@ -698,6 +721,8 @@ def main():
     except getopt.GetoptError:
         print('Input invalid! Input line as: CascadeCircuit.py -i <inputfile> -p <parameter>')
         sys.exit(2)
+    print(arguments)
+
 
     for optionAndArgument in options:
         if len(optionAndArgument) > 2: ErrorRaiseCommandLineEntry(systemArguments) 
@@ -708,18 +733,23 @@ def main():
             netFileName = optionAndArgument[1] + ".net"
             csvFileName = optionAndArgument[1] + ".csv"
             pngFileName = optionAndArgument[1]
+            fileBoolean = True
         elif optionAndArgument[0] in ("-p", "--param"):
-            graphParameters = optionAndArgument[1]
+            graphParameters = optionAndArgument[1].strip()
             graphBoolean = True
 
     if not (".net" in netFileName): raise OSError("File extension is invalid: " + netFileName)
     if not (".csv" in csvFileName): raise OSError("File extension is invalid: " + csvFileName)
 
-     # Arguments should be empty in this case, when it is full, then the command line prompt is written incorrectly
+    # Arguments should be empty in this case, when it is full, then the command line prompt is written incorrectly
+    if fileBoolean and len(arguments) > 0: ErrorRaiseCommandLineEntry(systemArguments)
+    if re.search(r".+[[]", graphParameters) or re.search(r"[]].+", graphParameters): ErrorRaiseCommandLineEntry(systemArguments)
 
+    #if not (re.search(r"[[]([0-9]+\s*,*)+[]]", graphParameters)): ErrorRaiseCommandLineEntry(systemArguments)
     userColumns= re.findall(r'\d+', graphParameters)    # Use REGEX to extract all numbers
     userColumns = [int(i) for i in userColumns]         # Convert the strings into integers
-    userColumns = RemoveRepeatElements(userColumns)
+    userColumns = RemoveEmptyElements(userColumns)       
+    userColumns = sorted(userColumns)
 
     # File Reading and Error Handling
     print("READING FILE")
@@ -752,16 +782,8 @@ def main():
     outputValues = {"inputVoltage": 0, "outputVoltage": 0, "inputCurrent": 0, "outputCurrent": 0, "inputPower": 0, "outputPower": 0, "inputImpedance": 0, "outputImpedance": 0,
         "voltageGain": 0, "currentGain": 0, "powerGain": 0, "transmittance": 0,}
 
-    # Write to the file
-    with open(csvFileName, 'w') as file:
-        file.write("Freq")
-        for outputTerm in outputTerms:
-            if (outputTerm[3]): file.write(",|" + outputTerm[1] + "|,/_" + outputTerm[1])
-            else:               file.write(",Re(" + outputTerm[1] + "),Im(" + outputTerm[1] + ")")
-        file.write("\n Hz")
-        for outputTerm in outputTerms:
-            if (outputTerm[3]): file.write("," + outputTerm[2] + ",Rads")   
-            else:               file.write("," + outputTerm[2] + "," + outputTerm[2])    
+    # Write to the file to get the initial format
+    InitialiseFile(csvFileName, outputTerms)   
     
     # Data Processing Section
     print("PROCESSING DATA")
@@ -801,19 +823,13 @@ def main():
         outputValues["outputPower"] = outputValues["outputVoltage"] * np.conj(outputValues["outputCurrent"])
         
         # File Writing
-        with open(csvFileName, 'a') as file:
-            file.write("\n"+FormatNumber(frequency))
-            WriteDataToFile(file, outputTerms, list(outputValues.values()))
+        WriteDataToFile(file, outputTerms, list(outputValues.values()), csvFileName, frequency)
         
     print("WRITING DATA")
 
     # Output Graphs
-    if graphBoolean == True:
-        graphColumns = [0,] + userColumns
-        outputData = pd.read_csv(csvFileName, skiprows=[0, 1], usecols=graphColumns)
-        for i in range(0, len(graphColumns)-1):
-            outputData.plot(0, i+1)
-            plt.savefig(pngFileName + "_" + str(graphColumns[i+1]) + ".png")
+    if graphBoolean == True: GenerateGraph(userColumns, csvFileName, pngFileName)
+
     print("ENDING PROGRAM")
 
 if __name__ == "__main__":  # Allows code to be run as a script, but not when imported as a module. This is the top file
