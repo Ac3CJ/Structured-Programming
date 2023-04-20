@@ -1,29 +1,27 @@
-# =========================================== TO DO LIST ===========================================
-# Default output terms order (Vin (0), Vout (1), Iin (2), Iout (3), Pin (4), Pout (5), Zin (6), Zout (7), Av (8), Ai (9), Ap (10), T (11))
+# =========================================== NOTE TO SELF ===========================================
 # outputTerms tuples are ordered as: (Output Index, Variable Name, Variable Unit, Decibel Boolean, Exponent)
-# 3. Maybe consider what happens when there are two parallel components
-#    connected in series between two nodes (not including common node)
-# 4. Change the Exception test for CheckComponentType and also test that bitch
-# 19. Figure out why the maths is wrong Pout only
 
 # =========================================== ERROR HANDLING NOTES ===========================================
 # 1. Check if the blocks exist, this should throw the right error DONE
 # 2. Check if the blocks are empty DONE
-# 3. Check if there are no source components
-# 4. Check for illegal node connections n1=1 n2=5 etc.
-# 5. Check for nonsense data in the .NET file, like non commented parts
+# 3. Check if there are no source components    DONE
+# 4. Check for illegal node connections n1=1 n2=5 etc. DONE
+# 5. Check for nonsense data in the .NET file, like non commented parts DONE
 # 6. Check for when there is no closing delimeter DONE
 # 7. Check for when there is no opening delimeter DONE
-# 8. Check for spaces between the equals and value
-# 9. Check for spaces between dB and unit. For example: dB mV
+# 8. Check for spaces between the equals and value  DONE
+# 9. Check for spaces between dB and unit. For example: dB mV   DONE
 # 10. Check for incorrect naming for variables in file    DONE
 # 11. Check if the graph input is within range for file.    DONE
 # 12. Check if the same graph is being outputted    DONE
-# 13. Check if there are uncommented comments, decide if the program should stop or ignore it
-# 14. Check for missing variable in circuit block
-# 15. Check if both Fstart and Fend have an L or not
-# 16. When resistance or inductance is 0 when parallel, and conductance or capacitance 0
+# 13. Check if there are uncommented comments, decide if the program should stop or ignore it DONE
+# 14. Check for missing variable in circuit block   DONE
+# 15. Check if both Fstart and Fend have an L or not    DONE
+# 16. When resistance or inductance is 0 when parallel, and conductance or capacitance 0    DONE
 # 17. Check for other component type letters, "A", "E", "P", etc. DONE
+# 18. When there are multiple input sources DONE
+# 19. Check when there are multiple values with the same nodes if they are in series DONE
+# 20. Check for discontinued circuits: n1=1 n2=2 R=10       n1=3 n2=4 C=1e-6    DONE
 
 # NOTE TO SELF: WHEN WRITING THE FILE, PUT COMMA BEFORE THE DATA POINT
 
@@ -43,21 +41,64 @@ from matplotlib import pyplot as plt
 # ============================== ERROR HANDLING ==============================
 
 def ErrorRaiseCommandLineEntry(systemArguments=[]):
+    """
+    This raises an error with pre-determined text for when there is an error in the command line
+
+    Args:
+        systemArguments (list, optional): _description_. Defaults to [].
+
+    Raises:
+        SyntaxError: _description_
+    """    
     raise SyntaxError("Invalid entry: " + ' '.join(systemArguments) +
                                               "\n Example Entries:\n python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]\n python CascadeCircuit.py input.net output.csv")
-
-def ErrorRaiseEmptyBLock(block=""):
-    raise ValueError("Empty Block Detected! Check: " + block + " Block")
-
-def ErrorRaiseUnknownVariable(variable=""):
-    raise ValueError("Unknown Variable Found: " + variable)
 
 # ======================== READING AND ORGANISING DATA ========================
 
 # ============== GENERAL ==============
 
+def CleanTextLine(text):
+    """
+    Cleans the line of text from repeat spaces and commas as well as spaces before and after an equals sign.
+    
+    Examples shown below:
+        text = "n1 =======    2   ,   n2 = 1, R   = === 17  "
+        print(text)
+        
+        Output> n1=2 n2=1 R=17
+
+    Args:
+        text (str): String to be cleaned
+
+    Returns:
+        text (str): Cleaned string
+    """    
+    text = re.sub(r"[\s,]+", " ", text.strip())     # Checks for one or more occurences of a space or comma then replaces it with a space
+    text = re.sub(r"[\s,]*=[\s,=]*", "=", text)     # Checks for zero or more occurences of a space or comma followed by an "=", then zero or more occurences of space, comma, "="
+    return text
+
+def MakeNLengthGroups(myList, n):
+    """
+    Takes a list and creates sublists of the elements of length n. This allows for odd pairings as well.
+
+    Args:
+        myList (list): List to be split into sublists
+        n (int): number of elements in each sublist
+
+    Returns:
+        list: A list that contains the sublists
+    """    
+    return [myList[x:x+n] for x in range(0, len(myList), n)]
+
 def CheckEmptyListError(myList, block="UNDEFINED"):
-    if (len(myList) <= 0): ErrorRaiseEmptyBLock(block)
+    """
+    Checks if the list for a block is empty and throws an error 
+
+    Args:
+        myList (list): list that will be examined to throw an error
+        block (str, optional): _description_. Defaults to "UNDEFINED".
+    """    
+    if (len(myList) <= 0): raise ValueError("Empty Block Detected! Check: " + block + " Block")
     return
 
 def RemoveRepeatElements(myList):
@@ -85,7 +126,9 @@ def RemoveComments(file):
     text = ""
     for line in file:
         # Checks if the line doesn't start with a #
-        if not (line.startswith('#')): text += line
+        if not (line.startswith('#')):
+            text += line
+            text = re.sub(r"#.*", "", text)
     return text
 
 def ExtractBlock(text, start, end):
@@ -109,7 +152,7 @@ def ExtractBlock(text, start, end):
 
 def RemoveEmptyElements(myList):
     """
-    Removes empty elements from a list
+    Removes empty elements from a list by filtering empty elements from the list
 
     Args:
         list0 (list): The list to have empty elements removed
@@ -126,7 +169,7 @@ def ExtractExponent(prefix=""):
     More information about this can be found in the table: https://basicelectronicscoed.files.wordpress.com/2015/07/metric-prefixes.png
 
     Args:
-        prefix (str): String that contains the character for the prefix
+        prefix (str, optional): String that contains the character for the prefix
 
     Returns:
         int: This is the exponent value
@@ -139,24 +182,53 @@ def ExtractExponent(prefix=""):
     elif "M" in prefix:  return 6
     elif "G" in prefix:  return 9
     else: 
-        warnings.warn("WARNING: No or unknown prefix.\n Defaulting to 0", UserWarning)
+        warnings.warn("WARNING: No or unknown prefix: " + str(prefix) + " Defaulting to 0")
         return 0
 
 # ============== CIRCUIT BLOCK ==============
+
+def ValidateCircuit(componentData, componentText):
+    """
+    Validates the circuit line by checking if the data fits the predetermined list structure. The structure of the data is shown below:
+        [int node1, int node, str componentType, float componentValue, int exponent]
+    
+    Args:
+        componentData (list): list of all relevant data for the component
+        componentText (str): original text that stores the text for the component
+
+    Raises:
+        ValueError: Invalid component for when the list is too long or short
+        ValueError: Invalid component for when the list has incorrect data entries
+    """    
+    componentDataLength = len(componentData)
+
+    # Checks if the component has less than 4 data entries or more than 5
+    if componentDataLength < 4 or componentDataLength > 5: raise ValueError("Invalid Component: " + "".join(str(componentText)))
+    
+    # Boolean value to check
+    componentCheck = (isinstance(componentData[0], (int, float))) and (isinstance(componentData[1], (int, float))) and (isinstance(componentData[2], str)) and (isinstance(componentData[3], (int, float)))
+    
+    # Returns if the component entries are valid and there are only 4 entries
+    if ((componentDataLength < 5) and componentCheck): return
+    
+    # Returns if there are 5 component entries and also fits the structure of the componentData list
+    if componentDataLength >= 5 and componentCheck and (isinstance(componentData[4], (int,float))): return
+    
+    raise ValueError("Invalid Component: " + "".join(str(componentText)))
 
 def CheckComponentType(data=""):
     """
     Checks for the component type of the component
 
     Args:
-        data (str): Holds the specific data for the component, either node data or component data
+        data (str, optional): Holds the specific data for the component, either node data or component data
 
     Returns:
         Boolean: Will return True if the data includes the component type, False if it is node data
     """    
     if ('R' in data) or ('G' in data) or ('C' in data) or ('L' in data): return True
     elif ('n1' in data) or ('n2' in data): return False
-    else: ErrorRaiseUnknownVariable(data)
+    else: raise ValueError("Unknown Variable Found: " + data)
     
 def ConvertCircuitData(component):
     """
@@ -183,15 +255,17 @@ def ConvertCircuitData(component):
         Args:
             data (str): String of the split component data, can be connected nodes or component type.
         """        
-        if not ("=" in data):
-            componentData.append(ExtractExponent(data))
+        if not ("=" in data):  
+            componentData.append(ExtractExponent(data))     # Appends the exponent if there is no equals found  and returns
             return
         
-        if (CheckComponentType(data)): componentData.append(data.split("=")[0])
+        if (CheckComponentType(data)): componentData.append(data.split("=")[0]) # If the component type is legal, append the component type (before the equals sign)
 
-        value = float(data.split("=")[1])
+        value = float(data.split("=")[1])   # Retrieves the value that is after the equals sign and appends it to the componentData list
         componentData.append(value)
     
+    # Outer Function Code
+    component = CleanTextLine(component)
     componentTermList = component.split(" ")
     componentData = []
 
@@ -199,11 +273,15 @@ def ConvertCircuitData(component):
         try:
             AppendComponentData(term)
         except:
-            raise ValueError("Invalid Data Entered: " + term + "\n Please Check Circuit")
-        
-    if len(componentData) >= 5: componentData[3] = componentData[3] * (10 ** componentData[4])  # Apply exponent to value
-    print(componentData)
-    return tuple(componentData)
+            raise ValueError("Invalid Data Entered: " + term + "\n Please Check Circuit")   # Called when the value is invalid and can't be converted to a float
+    
+    ValidateCircuit(componentData, component)
+    try:
+        if len(componentData) >= 5: componentData[3] = componentData[3] * (10 ** componentData[4])  # Apply exponent to value
+    except:
+        raise ValueError("Invalid Data Entered: " + component + "\n Please Check Circuit")
+
+    return tuple(componentData)     # Returns the list as a tuple to avoid coupling issues
 
 def GetCircuitComponents(circuit):
     """
@@ -218,23 +296,43 @@ def GetCircuitComponents(circuit):
     Additional Information:
         Format of circuitComponents: (Connection Type (str), Component Type(str), Component Value(float))
     """    
-    circuitLines = circuit.split("\n")
     circuitComponents = []
+    seriesComponents = []
+    circuitLines = circuit.split("\n")
+    circuitLines = RemoveEmptyElements(circuitLines)
 
-    for line in circuitLines:
-        if not (line == ""):
-            circuitComponents.append(ConvertCircuitData(line))
+    for i in range(0, len(circuitLines)):
+        if not (circuitLines[i] == ""): circuitComponents.append(ConvertCircuitData(circuitLines[i]))   # Appends all of the available components
         
     # Removes empty elements from list
     circuitComponents = RemoveEmptyElements(circuitComponents)
 
-    # Sorts the list of tuples by values in nodes 1 and 2
-    circuitComponents = sorted(circuitComponents, key=lambda x: (x[0], x[1]))
-
     # Checks if there is a connection to the common node, then inserts a 'P' or 'S' to the tuple depending on the connection type
     for i in range(0, len(circuitComponents)):
         if (circuitComponents[i].count(0) != 0): circuitComponents[i] = ('P',) + circuitComponents[i]       
-        else: circuitComponents[i] = ('S',) + circuitComponents[i]
+        else: 
+            # Checks if the nodes are 1 value apart, if they aren't raise an error (n1=1 n2=3)
+            if (abs(circuitComponents[i][0] - circuitComponents[i][1]) > 1): raise ValueError("Invalid Circuit Connection: " + " ".join(circuitLines[i]))
+
+            seriesComponents.append(sorted(circuitComponents[i][:2]))   # Appends series components to a separate list and only takes in the node values
+            circuitComponents[i] = ('S',) + circuitComponents[i]
+
+    # Sorts the list of tuples by values in nodes 1 and 2
+    circuitComponents = sorted(circuitComponents, key=lambda x: (x[1], x[2]))
+
+    # Gets the number of series components and makes a list of the first node values
+    seriesLength = len(seriesComponents)
+    seriesCheckList = [item[0] for item in seriesComponents]
+
+    # Check if there are repeated series components (If they share two nodes).
+    # Checks the length of the list against a set of itself, if they differ, there are duplicates. Sets cannot have duplicates, so it will change if there are repeats
+    if seriesLength != len(set(seriesCheckList)): raise ValueError("Conflicting Circuit Connection:\n" + circuit)
+
+    # Check if there are disconnected nodes, by creating a list from 1 to seriesLength and comparing it to the original seriesComponent list
+    # If the circuit is connected the series components will increment by 1 from 1 to the seriesLength
+    nodeCheckList = [i for i in range(1, int(seriesComponents[seriesLength-1][0])+1)]
+
+    if seriesCheckList != nodeCheckList: raise ValueError("Missing Node Connection:\n" + circuit)
 
     # Removes the node data from the circuitComponents tuples as they are no longer needed
     for i in range(0, len(circuitComponents)):
@@ -279,15 +377,15 @@ def UpdateTermData(term, termsList):
     elif "RL" in term:      termsList[2] = termValue
     elif "Fstart" in term:  
         termsList[3] = termValue
-        termsList[6] = CheckLogarithmicSweep(term)
+        termsList[6] = CheckLogarithmicSweep(term)      # Check if there is an L in the frequency 
     elif "Fend" in term:    
         termsList[4] = termValue
         termsList[6] = CheckLogarithmicSweep(term)
     elif "Nfreqs" in term:  termsList[5] = termValue
-    else: raise ValueError("Invalid Entry: " + str(term) + "\n Please Check Circuit")   # Throw an error if an undetected term is entered
+    else: raise ValueError("Invalid Entry: " + str(term) + "\n Please Check Circuit")   # Throw an error if an unexpected term is entered
     return termsList
 
-def ConvertTerms(termLine, termsList):
+def ConvertTerms(termLine, termsList, termsCounter):
     """
     Converts each line in the <TERMS> block into usable information. This separates all of the terms that are on the same line and ensures that the values are extracted.
     If the data entered is erroneous, then the program will raise an error and halt.
@@ -298,21 +396,24 @@ def ConvertTerms(termLine, termsList):
     Args:
         termLine (str): String containing the line of values to be read from
         termsList (list): The list of all of the terms that are available to be read
+        termsCounter (int): Integer for the how many times the list has been updated
 
     Raises:
         TypeError: If an errorneous piece of data is found in the file, the program will halt
 
     Returns:
         termsList (list): The updated list of all of the terms
+        termsCounter (int): Integer for the how many times the list has been updated
     """    
+    termLine = CleanTextLine(termLine).strip()      # Clean out whitespace and delimiters
     terms = termLine.split(" ")
-
     for i in range(0, len(terms)):
-        try:
-            termsList = UpdateTermData(terms[i],termsList)
+        try:    
+            termsList = UpdateTermData(terms[i],termsList) # Update the terms list and increment the counter by 1 for each successful update
+            termsCounter += 1
         except:
-            raise TypeError("Invalid Data Type Entered: " + str(terms[i]) + "\n Please Check Circuit")  # Throw an error if an invalid entry is inputted
-    return termsList
+            raise TypeError("Invalid Data Type Entered: " + terms[i] + "\n Please Check Circuit")  # Throw an error if an invalid entry is inputted
+    return termsList, termsCounter
 
 def GetTerms(terms):
     """
@@ -333,12 +434,16 @@ def GetTerms(terms):
     termsLines = terms.split("\n")
     termsLines = RemoveEmptyElements(termsLines)
     termsList = [("", 0), 0, 0, 0, 0, 0, False]
+    termsCounter = 0
 
     CheckEmptyListError(termsLines, "TERMS")
 
     for i in range(0, len(termsLines)):
         if not (termsLines[i] == ""):
-            termsList = ConvertTerms(termsLines[i], termsList)
+            termsList, termsCounter = ConvertTerms(termsLines[i], termsList, termsCounter)
+
+    # There are 6 terms, so if the counter is triggered too little or too many times, then the TERMS block is erroneous
+    if termsCounter != 6: raise ValueError("TERMS Block has too many or too little terms! Check TERMS block.\n" + terms)    
     return termsList
 
 # ============== OUTPUT BLOCK ==============
@@ -356,14 +461,16 @@ def ExtendDecibelAndExponent(outputUnit):
         DecibelAndExponent (list): A list containing whether a decibel reading is required and also the desired prefix
     """    
     DecibelAndExponent = [False, 0]
+    outputUnitNew = CleanTextLine(outputUnit).strip()
+    outputUnitNew = re.sub(r"V?A?W?(Ohms)?", "", outputUnitNew).strip()     # Checks for the known variable units and removes them from the decibels and exponent
 
-    if "dB" in outputUnit:              # When dB is found, it sets the bool to True and removes it from the string
+    if "dB" in outputUnitNew:              # When dB is found, it sets the bool to True and removes it from the string
         DecibelAndExponent[0] = True
-        outputUnit.replace("dB", "")
-    try:
-        DecibelAndExponent[1] = ExtractExponent(outputUnit[0])  # Checks the first character in the string which will be the prefix
-    except:
-        DecibelAndExponent[1] = 0       # This is run when there is no prefix for gain, added for robustness
+        outputUnitNew = outputUnitNew.replace("dB", "").strip()
+
+    # If there is more information other than the prefix, raise an error
+    if (len(outputUnitNew) > 1): raise ValueError("Error Detected: " + outputUnit + "\nCheck Circuit")   
+    if (len(outputUnitNew) > 0): DecibelAndExponent[1] = ExtractExponent(outputUnitNew[0])  # Checks the first character in the string which will be the prefix
 
     return DecibelAndExponent
 
@@ -394,7 +501,6 @@ def InsertOutputIndex(outputVariable):
     elif "Ai" in outputVariable:    return 9
     elif "Ap" in outputVariable:    return 10
     elif "T" in outputVariable:     return 11
-
     raise Exception("Invalid Output Variable: " + str(outputVariable)) # Raise an error if an unknown output unit is entered
 
 def ConvertOutputs(outputLine):
@@ -411,10 +517,9 @@ def ConvertOutputs(outputLine):
         output (tuple): Tuple containing the relevant data for each output variable
     """    
     output = re.split("\s", outputLine, 1)  # Split on first white space
-    if len(output) < 2: output.append("L")
-
-    output.insert(0, InsertOutputIndex(output[0]))
-    output.extend(ExtendDecibelAndExponent(output[2]))
+    if len(output) < 2: output.append("L")  # If the gain has no units, then append an L 
+    output.insert(0, InsertOutputIndex(output[0]))      # Insert the output index to the start of the list
+    output.extend(ExtendDecibelAndExponent(output[2]))  # Extend the list with the 
     
     return tuple(output)
 
@@ -491,11 +596,14 @@ def CalculateMatrix(circuitComponents, angularFrequency):
         connectionType = individualComponent[0]
         componentType = individualComponent[1]
         componentValue = individualComponent[2]
-
-        if   componentType == "R": impedance = componentValue
-        elif componentType == "G": impedance = 1/componentValue
-        elif componentType == "L": impedance = 1j*angularFrequency*componentValue
-        elif componentType == "C": impedance = 1/(1j*angularFrequency*componentValue)
+        try: 
+            if   componentType == "R": impedance = componentValue
+            elif componentType == "G": impedance = 1/componentValue
+            elif componentType == "L": impedance = 1j*angularFrequency*componentValue
+            elif componentType == "C": impedance = 1/(1j*angularFrequency*componentValue)
+            else: raise ValueError("Unknown Component Found: " + " ".join(str(individualComponent)))
+        except:
+            raise ZeroDivisionError("Cannot divide by 0:\n(Connection Type, Component Type, Component Value, Exponent)\n" + "".join(str(individualComponent)))
     
         if impedance != 0:                                                     
             componentMatrix = GetComponentMatrix(impedance, connectionType)
@@ -564,14 +672,16 @@ def WriteDataToFile(file, outputTerms, outputs):
             secondPart = FormatNumber(np.imag(outputs[outputIndex]))
 
         file.write("," + firstPart + "," + secondPart)
+    return
 
 # =================================================================================================
 # =========================================== MAIN CODE ===========================================
 # =================================================================================================
-
+# python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]
 def main():
     systemArguments = sys.argv[1:]
-    # python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]
+    #systemArguments = ["a_Test_Circuit_1EVIL.net", "test.csv"]
+
     graphParameters = "1"           # String of 1 to initialise the data
     graphBoolean = False
     options = [] 
@@ -599,7 +709,7 @@ def main():
             csvFileName = optionAndArgument[1] + ".csv"
             pngFileName = optionAndArgument[1]
         elif optionAndArgument[0] in ("-p", "--param"):
-            graphParameters = optionAndArgument
+            graphParameters = optionAndArgument[1]
             graphBoolean = True
 
     if not (".net" in netFileName): raise OSError("File extension is invalid: " + netFileName)
@@ -625,11 +735,11 @@ def main():
 
     if (circuitText == "") or (termsText == "") or (outputText == ""): raise ValueError("Empty Block Detected!\n Check file: " + netFileName)
 
-    print("\n READING CIRCUIT BLOCK \n")
+    print("READING CIRCUIT BLOCK")
     circuitComponents = GetCircuitComponents(circuitText)
-    print("\n READING TERMS BLOCK \n")
+    print("READING TERMS BLOCK")
     inputSource, sourceImpedance, loadImpedance, startFrequency, endFrequency, numberOfFrequencies, logarithmicSweepBoolean = GetTerms(termsText)
-    print("\n READING OUTPUT BLOCK \n")
+    print("READING OUTPUT BLOCK")
     outputTerms = GetOutputOrder(outputText)
 
     CheckEmptyListError(circuitComponents, "CIRCUIT")
@@ -704,6 +814,7 @@ def main():
         for i in range(0, len(graphColumns)-1):
             outputData.plot(0, i+1)
             plt.savefig(pngFileName + "_" + str(graphColumns[i+1]) + ".png")
+    print("ENDING PROGRAM")
 
 if __name__ == "__main__":  # Allows code to be run as a script, but not when imported as a module. This is the top file
-    main()      # Passes in the arguments except for the script name
+    main() 
