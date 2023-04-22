@@ -1,8 +1,18 @@
+# ====================================================================================================================================
+#   Filename:     CascadeCircuit.py
+#   Summary:      This is the main module of the program
+#   Description:  This is the main code of the program, which handles the command line inputs, data processing and mathematics of the
+#                 circuit. This calls the other modules to read and write to the designated files
+#
+#   Author:       C.J. Gacay 
+# ====================================================================================================================================
+
 # =========================================== NOTE TO SELF ===========================================
 # outputTerms tuples are ordered as: (Output Index, Variable Name, Variable Unit, Decibel Boolean, Exponent)
 # python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]
 # python CascadeCircuit.py a_Test_Circuit_1.net test.csv
 # python AutoTest_08.py CascadeCircuit.py 1.0e-14 1.0e-14
+# https://moodle.bath.ac.uk/pluginfile.php/2016444/mod_resource/content/6/Coursework_definition_2022_23_v01_pngfigs.pdf-correctedByPAVE%20%281%29.pdf
 
 # =========================================== ERROR HANDLING NOTES ===========================================
 # 1. Check if the blocks exist, this should throw the right error DONE
@@ -25,6 +35,9 @@
 # 18. When there are multiple input sources DONE
 # 19. Check when there are multiple values with the same nodes if they are in series DONE
 # 20. Check for discontinued circuits: n1=1 n2=2 R=10       n1=3 n2=4 C=1e-6    DONE 
+# 21. Check for divide by 0 in the maths        DONE
+# 22. Zero load impedance and source impedance  DONE
+# 23. Swap the end frequency and start frequency DONE
 
 # =================================================================================================
 # =========================================== LIBRARIES ===========================================
@@ -55,6 +68,22 @@ def ErrorRaiseCommandLineEntry(systemArguments=[]):
                                               "\n Example Entries:\n python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]\n python CascadeCircuit.py input.net output.csv")
 
 # ============================== MATHEMATICS ==============================
+
+def GetFrequencies(startFrequency, endFrequency, numberOfFrequencies, logBoolean):
+    """
+    Gets a list of frequencies to analyse the circuit over. If a logarithmic sweep is detected, then the frequencies will be calculated in log scale
+
+    Args:
+        startFrequency (float): The starting frequency
+        endFrequency (float): The ending frequency
+        numberOfFrequencies (float): _description_
+        logBoolean (boolean): _description_
+
+    Returns:
+        list: list of frequencies for the system to analyse the circuit over
+    """    
+    if logBoolean: return np.logspace(math.log10(startFrequency), math.log10(endFrequency), int(numberOfFrequencies))
+    return np.linspace(startFrequency, endFrequency, int(numberOfFrequencies))
 
 def GetComponentMatrix(impedance, connectionType):
     """
@@ -123,8 +152,12 @@ def CalculateMatrix(circuitComponents, angularFrequency):
 # =========================================== MAIN CODE ===========================================
 # =================================================================================================
 def main():
+
+    # ========================================================
+    # ===================== COMMAND LINE =====================
+    # ========================================================
+
     systemArguments = sys.argv[1:]
-    #systemArguments = ["a_Test_Circuit_1EVIL.net", "test.csv"]
 
     graphParameters = "1"           # String of 1 to initialise the data
     graphBoolean = False
@@ -143,8 +176,8 @@ def main():
     except getopt.GetoptError:
         print('Input invalid! Input line as: CascadeCircuit.py -i <inputfile> -p <parameter>')
         sys.exit(2)
-    print(arguments)
 
+    # Read the options that were written into the command line
     for optionAndArgument in options:
         if len(optionAndArgument) > 2: ErrorRaiseCommandLineEntry(systemArguments) 
         if optionAndArgument[0] == '-h':
@@ -159,6 +192,7 @@ def main():
             graphParameters = optionAndArgument[1].strip()
             graphBoolean = True
 
+    # Check that the file extensions are correct and raise an error if they are not correct
     if not (".net" in netFileName): raise OSError("File extension is invalid: " + netFileName)
     if not (".csv" in csvFileName): raise OSError("File extension is invalid: " + csvFileName)
 
@@ -166,6 +200,7 @@ def main():
     if fileBoolean and len(arguments) > 0: ErrorRaiseCommandLineEntry(systemArguments)
     if re.search(r".+[[]", graphParameters) or re.search(r"[]].+", graphParameters): ErrorRaiseCommandLineEntry(systemArguments)
 
+    # Convert the user inputted columns into a list of numbers 
     userColumns= re.findall(r'\d+', graphParameters)        # Use REGEX to extract all numbers
     userColumns = [int(i) for i in userColumns]             # Convert the strings into integers
     userColumns = dataRead.RemoveEmptyElements(userColumns)       
@@ -174,6 +209,7 @@ def main():
     # File Reading and Error Handling
     dataWrite.CreateFile(csvFileName)
     circuitText, termsText, outputText = dataRead.ReadFile(netFileName)
+
     print("READING CIRCUIT BLOCK")
     circuitComponents = dataRead.GetCircuitComponents(circuitText)
 
@@ -193,18 +229,20 @@ def main():
     # Write to the file to get the initial format
     dataWrite.InitialiseFile(csvFileName, outputTerms)   
     
-    # Data Processing Section
+    # ===============================================================================
+    # =============================== DATA PROCESSING ===============================
+    # ===============================================================================
+
     print("PROCESSING DATA")
 
     outputValues = {"inputVoltage": 0, "outputVoltage": 0, "inputCurrent": 0, "outputCurrent": 0, "inputPower": 0, "outputPower": 0, "inputImpedance": 0, "outputImpedance": 0,
         "voltageGain": 0, "currentGain": 0, "powerGain": 0, "transmittance": 0,}
 
     # For logspace, apply a log function to the frequencies so that the values are the base of the exponent
-    if (logarithmicSweepBoolean == True): frequencies = np.logspace(math.log10(startFrequency), math.log10(endFrequency), int(numberOfFrequencies))
-    else: frequencies = np.linspace(startFrequency, endFrequency, int(numberOfFrequencies))
+    frequencies = GetFrequencies(startFrequency, endFrequency, numberOfFrequencies, logarithmicSweepBoolean)
 
+    # SUPPORTING MATHEMATICS IS LINKED AT THE TOP OF THE FILE
     for frequency in frequencies:
-        # Creating the Matrices
         ABCDMatrix = CalculateMatrix(circuitComponents, 2*math.pi*frequency)
 
         A_C = ABCDMatrix[0, 0]
@@ -212,38 +250,41 @@ def main():
         C_C = ABCDMatrix[1, 0]
         D_C = ABCDMatrix[1, 1]
 
-        # Calculating all of the values
-        outputValues["inputImpedance"] = (A_C * loadImpedance + B_C) / (C_C * loadImpedance + D_C)
-        outputValues["outputImpedance"] = (D_C * sourceImpedance + B_C) / (C_C * sourceImpedance + A_C)
-        outputValues["voltageGain"] = loadImpedance / (A_C * loadImpedance + B_C)
-        outputValues["currentGain"] = 1 / (C_C * loadImpedance + D_C)
-        outputValues["powerGain"] = outputValues["voltageGain"] * np.conj(outputValues["currentGain"])
-        outputValues["transmittance"] = 2 / (A_C * loadImpedance+B_C + C_C * loadImpedance * sourceImpedance + D_C * sourceImpedance)
+        # Check for zero values and perform maths
+        try:
+            outputValues["inputImpedance"] = (A_C * loadImpedance + B_C) / (C_C * loadImpedance + D_C)
+            outputValues["outputImpedance"] = (D_C * sourceImpedance + B_C) / (C_C * sourceImpedance + A_C)
+            outputValues["voltageGain"] = loadImpedance / (A_C * loadImpedance + B_C)
+            outputValues["currentGain"] = 1 / (C_C * loadImpedance + D_C)
+            outputValues["powerGain"] = outputValues["voltageGain"] * np.conj(outputValues["currentGain"])
+            outputValues["transmittance"] = 2 / (A_C * loadImpedance+B_C + C_C * loadImpedance * sourceImpedance + D_C * sourceImpedance)
 
-        if "V" in inputSource[0]:
-            outputValues["inputVoltage"] = inputSource[1] * (outputValues["inputImpedance"] / (sourceImpedance + outputValues["inputImpedance"]))
-            outputValues["inputCurrent"] = outputValues["inputVoltage"] / outputValues["inputImpedance"]
-        else:
-            outputValues["inputCurrent"] = inputSource[1] * (sourceImpedance / (sourceImpedance + outputValues["inputImpedance"]))
-            outputValues["inputVoltage"] = outputValues["inputCurrent"] * outputValues["inputImpedance"]    
+            if "V" in inputSource[0]:
+                outputValues["inputVoltage"] = inputSource[1] * (outputValues["inputImpedance"] / (sourceImpedance + outputValues["inputImpedance"]))
+                outputValues["inputCurrent"] = outputValues["inputVoltage"] / outputValues["inputImpedance"]
+            else:
+                outputValues["inputCurrent"] = inputSource[1] * (sourceImpedance / (sourceImpedance + outputValues["inputImpedance"]))
+                outputValues["inputVoltage"] = outputValues["inputCurrent"] * outputValues["inputImpedance"]
+        except:
+            raise ZeroDivisionError("Division by Zero has occurred! Please check the CIRCUIT and TERMS Blocks in: " + netFileName)    
         
         outputValues["inputPower"] = outputValues["inputVoltage"] * np.conj(outputValues["inputCurrent"])
         outputValues["outputVoltage"] = outputValues["inputVoltage"] * outputValues["voltageGain"]
         outputValues["outputCurrent"] = outputValues["inputCurrent"] * outputValues["currentGain"]
-        #outputValues["outputPower"] = outputValues["inputPower"] * outputValues["powerGain"]
         outputValues["outputPower"] = outputValues["outputVoltage"] * np.conj(outputValues["outputCurrent"])
-        #print(outputValues["outputVoltage"],outputValues["outputCurrent"])
-        #print(outputValues["outputPower"])
         
-        # File Writing
         dataWrite.WriteDataToFile(outputTerms, list(outputValues.values()), csvFileName, frequency)
-        
+
     print("WRITING DATA")
 
     # Output Graphs
     if graphBoolean == True: dataWrite.GenerateGraph(userColumns, csvFileName, pngFileName)
 
     print("ENDING PROGRAM")
+
+# ===================================================================================================
+# =========================================== END OF CODE ===========================================
+# ===================================================================================================
 
 if __name__ == "__main__":  # Allows code to be run as a script, but not when imported as a module. This is the top file
     main() 
