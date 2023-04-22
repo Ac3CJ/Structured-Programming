@@ -1,6 +1,18 @@
-import re, warnings, getopt, sys
+# ====================================================================================================================================
+#   Filename:     DataReading.py
+#   Summary:      The module that contains the code for reading the data from the file
+#   Description:  This is a set of functions that are used to read the .net file and output the relevant data back to the main code.
+#                 The functions also handle the error handling for erroneous file entries and flags them before they can reach the
+#                 main program as an error, or worse a mathematical error.
+#
+#   Author:       C.J. Gacay 
+# ====================================================================================================================================
 
-# ============================== ERROR HANDLING ==============================
+import re, warnings
+
+# ====================================================================================================================================
+# ========================================================== ERROR HANDLING ==========================================================
+# ====================================================================================================================================
 
 def ErrorRaiseCommandLineEntry(systemArguments=[]):
     """
@@ -15,7 +27,9 @@ def ErrorRaiseCommandLineEntry(systemArguments=[]):
     raise SyntaxError("Invalid entry: " + ' '.join(systemArguments) +
                                               "\n Example Entries:\n python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]\n python CascadeCircuit.py input.net output.csv")
 
-# ============== GENERAL ==============
+# =============================================================================================================================
+# ========================================================== GENERAL ==========================================================
+# =============================================================================================================================
 
 def CleanTextLine(text):
     """
@@ -120,7 +134,9 @@ def ExtractExponent(prefix=""):
         warnings.warn("WARNING: No or unknown prefix: " + str(prefix) + " Defaulting to 0")
         return 0
 
-# ============== CIRCUIT BLOCK ==============
+# ===================================================================================================================================
+# ========================================================== CIRCUIT BLOCK ==========================================================
+# ===================================================================================================================================
 
 def ValidateCircuit(componentData, componentText):
     """
@@ -225,12 +241,17 @@ def GetCircuitComponents(circuit):
     Args:
         circuit (str): String containing all of the information of the circuit components
 
+    Raises:
+        ValueError: Invalid circuit connections: Series nodes must be adjacent
+        ValueError: Conflicting circuit connections: Series components cannot share the same nodes
+        ValueError: Missing node connection: All nodes must be connected by a component
+
     Returns:
         circuitComponents (list): List of tuples where each tuple contains the component information
 
     Additional Information:
         Format of circuitComponents: (Connection Type (str), Component Type(str), Component Value(float))
-    """    
+    """        
     circuitComponents = []
     seriesComponents = []
     circuitLines = circuit.split("\n")
@@ -247,7 +268,7 @@ def GetCircuitComponents(circuit):
         if (circuitComponents[i].count(0) != 0): circuitComponents[i] = ('P',) + circuitComponents[i]       
         else: 
             # Checks if the nodes are 1 value apart, if they aren't raise an error (n1=1 n2=3)
-            if (abs(circuitComponents[i][0] - circuitComponents[i][1]) > 1): raise ValueError("Invalid Circuit Connection: " + " ".join(circuitLines[i]))
+            if (abs(circuitComponents[i][0] - circuitComponents[i][1]) > 1): raise ValueError("Invalid Circuit Connection: Series nodes must be adjacent\n" + " ".join(circuitLines[i]))
 
             seriesComponents.append(sorted(circuitComponents[i][:2]))   # Appends series components to a separate list and only takes in the node values
             circuitComponents[i] = ('S',) + circuitComponents[i]
@@ -255,21 +276,19 @@ def GetCircuitComponents(circuit):
     # Sorts the list of tuples by values in nodes 1 and 2
     circuitComponents = sorted(circuitComponents, key=lambda x: (x[1], x[2]))
     seriesComponents = sorted(seriesComponents, key=lambda x: (x[0], x[1]))
-    #print(seriesComponents)
+
     # Gets the number of series components and makes a list of the first node values
     seriesLength = len(seriesComponents)
     seriesCheckList = [item[0] for item in seriesComponents]
 
     # Check if there are repeated series components (If they share two nodes).
-    # Checks the length of the list against a set of itself, if they differ, there are duplicates. Sets cannot have duplicates, so it will change if there are repeats
-    if seriesLength != len(set(seriesCheckList)): raise ValueError("Conflicting Circuit Connection:\n" + circuit)
+    # Checks the length of the list against a set of itself, if they differ, there are duplicates.
+    if seriesLength != len(set(seriesCheckList)): raise ValueError("Conflicting Circuit Connection: Series components cannot share the same nodes.\n\nCheck CIRCUIT Block")
 
     # Check if there are disconnected nodes, by creating a list from 1 to seriesLength and comparing it to the original seriesComponent list
-    # If the circuit is connected the series components will increment by 1 from 1 to the seriesLength
     if seriesLength != 0:
-        nodeCheckList = [i for i in range(1, int(seriesComponents[seriesLength-1][0])+1)]
-
-        if seriesCheckList != nodeCheckList: raise ValueError("Missing Node Connection:\n" + circuit)
+        nodeCheckList = [i for i in range(1, int(seriesComponents[seriesLength-1][0])+1)]          
+        if seriesCheckList != nodeCheckList: raise ValueError("Missing Node Connection: All nodes must be connected by a component\n\nCheck CIRCUIT Block")
 
     # Removes the node data from the circuitComponents tuples as they are no longer needed
     for i in range(0, len(circuitComponents)):
@@ -277,7 +296,10 @@ def GetCircuitComponents(circuit):
 
     return circuitComponents
 
-# ============== TERMS BLOCK ==============
+# =================================================================================================================================
+# ========================================================== TERMS BLOCK ==========================================================
+# =================================================================================================================================
+
 def CheckLogarithmicSweep(term):
     """
     Checks for an L in the term and returns a Boolean
@@ -383,7 +405,9 @@ def GetTerms(terms):
     if termsCounter != 6: raise ValueError("TERMS Block has too many or too little terms! Check TERMS block.\n" + terms)
     return termsList
 
-# ============== OUTPUT BLOCK ==============
+# ==================================================================================================================================
+# ========================================================== OUTPUT BLOCK ==========================================================
+# ==================================================================================================================================
 
 def ExtendDecibelAndExponent(outputUnit):
     """
@@ -482,6 +506,10 @@ def GetOutputOrder(outputs):
     # Removes empty elements from list
     outputTerms = RemoveEmptyElements(outputTerms)
     return outputTerms
+
+# ==================================================================================================================================
+# ========================================================== FILE READING ==========================================================
+# ==================================================================================================================================
 
 def ReadFile(fileName):
     """
