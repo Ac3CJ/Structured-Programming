@@ -1,4 +1,14 @@
-import matplotlib as plt
+# ====================================================================================================================================
+#   Filename:     DataWriting.py
+#   Summary:      The module that contains the code for writing the data to a .csv file or .png
+#   Description:  This is a set of functions that are used to write the data into a .csv file. These include: Functions that write the
+#                 information into the file, functions that format the numbers into the correct form, format the numbers and ensure
+#                 that the data is written to the correct unit.
+#
+#   Author:       C.J. Gacay 
+# ====================================================================================================================================
+
+import matplotlib.pyplot as plt
 import cmath
 import numpy as np
 import pandas as pd
@@ -32,8 +42,7 @@ def FormatNumber(value,n=11):
     Returns:
         str: String format of the value, written in scientific notation to 4 significant figures
     """    
-    #return  ('{:e}'.format(float('%.4g' % value))).rjust(n)
-    return ('%.3E' % decimal.Decimal(float('%.4g' % value))).rjust(n)
+    return ('%.3E' % decimal.Decimal(value)).rjust(n)
 
 def WriteDataToFile(outputTerms, outputs, fileName, frequency):
     """Writes the output data into the .csv file given that the file is open for editing. This function also converts the value into decibels and polar form when stated.
@@ -46,7 +55,6 @@ def WriteDataToFile(outputTerms, outputs, fileName, frequency):
     Conversion to decibels: https://dspillustrations.com/pages/posts/misc/decibel-conversion-factor-10-or-factor-20.html#:~:text=The%20dB%20is%20calculated%20via,amplitude%2C%20the%20factor%20is%2020.
 
     Args:
-        file (_io.TextIOWrapper): This is the file that will be read
         outputTerms (list): List of all of the output terms. This is a list of lists
         outputs (list): List of all of the output values
         fileName (str): Name of the file to write to
@@ -55,9 +63,10 @@ def WriteDataToFile(outputTerms, outputs, fileName, frequency):
     decibelValue = 0
     with open(fileName, 'a') as file:
         file.write("\n"+FormatNumber(frequency,10))
+
     for outputTerm in outputTerms:
         outputIndex = outputTerm[0]
-        outputs[outputIndex] = outputs[outputIndex] / (10 ** outputTerm[4])
+        #outputs[outputIndex] = outputs[outputIndex] / (10 ** outputTerm[4])     # Applies the exponent to the value
 
         # Checks if the value is read in decibels
         if (outputTerm[3]):
@@ -65,10 +74,13 @@ def WriteDataToFile(outputTerms, outputs, fileName, frequency):
             firstPart = FormatNumber(np.real(decibelValue))
             secondPart = FormatNumber(np.angle(outputs[outputIndex]))
         else:
+            outputs[outputIndex] = outputs[outputIndex] / (10 ** outputTerm[4])     # Applies the exponent to the value
             firstPart = FormatNumber(np.real(outputs[outputIndex]))
             secondPart = FormatNumber(np.imag(outputs[outputIndex]))
+
         with open(fileName, 'a') as file:
             file.write("," + firstPart + "," + secondPart)
+
     with open(fileName, 'a') as file:
             file.write(",")
     return
@@ -85,6 +97,7 @@ def InitialiseFile(fileName, outputTerms):
         file.write("      Freq")
         for outputTerm in outputTerms:
             variable, variableUnit, decibleCheck = outputTerm[1:4]
+
             # Prints as in absolute and angle or real and imaginary depending on if it is a decibel value or not. Text is justified to the right
             if (decibleCheck): file.write("," + ("|" + str(variable) + "|").rjust(11) + ","+ ("/_" + str(variable)).rjust(11))
             else:               file.write(","+ ("Re(" + str(variable) + ")").rjust(11)+","+ ("Im(" + str(variable) + ")").rjust(11))      
@@ -106,16 +119,24 @@ def GenerateGraph(userColumns, inputFile, outputFile):
     """    
     graphColumns = [0,] + userColumns                                           # Joins the list of user inputs to a 0 to include the frequency
     outputData = pd.read_csv(inputFile, skiprows=[0, 1], usecols=graphColumns)  # Skip the first 2 rows as they contain the variable and units
-    variables = pd.read_csv(inputFile, nrows=0, usecols=graphColumns)
-    unit = pd.read_csv(inputFile, nrows=1, usecols=graphColumns) 
+    variables = pd.read_csv(inputFile, nrows=0, usecols=graphColumns)           # Creates a dictionary with the headers as keys
+    unit = pd.read_csv(inputFile, nrows=1, usecols=graphColumns)                # Creates a table of values where the units are indexed at 0
+
     for i in range(1, len(graphColumns)):
         outputData.plot(0, i)                                                 # Plot with frequency on x axis and other data on y axis
+        # Prints the axis labels with the units
         plt.xlabel("Frequency / Hz")
         plt.ylabel(list(variables.keys())[i] + " / " + unit.values[0][i])
         plt.savefig(outputFile + "_" + str(graphColumns[i]) + ".png")
     return
 
 def CreateFile(fileName):
+    """
+    Creates an empty file with the inputted fileName. This MUST include the file extension
+
+    Args:
+        fileName (str): Name of the file
+    """    
     with open(fileName, 'w') as file:
         file.write("")
     return
