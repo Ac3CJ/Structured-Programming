@@ -153,7 +153,7 @@ def CheckNodeConnections(seriesComponents):
 
     # Check if there are disconnected nodes, by creating a list from 1 to seriesLength and comparing it to the original seriesComponent list
     if seriesLength != 0:
-        nodeCheckList = [i for i in range(1, int(seriesComponents[seriesLength-1][0])+1)]          
+        nodeCheckList = [i for i in range(1, int(seriesCheckList[seriesLength-1])+1)]          
         if seriesCheckList != nodeCheckList: raise ValueError("Missing Node Connection: All nodes must be connected by a component\n\nCheck CIRCUIT Block")
 
 def ValidateCircuit(componentData, componentText):
@@ -193,7 +193,7 @@ def CheckComponentType(data=""):
         data (str, optional): Holds the specific data for the component, either node data or component data
 
     Returns:
-        Boolean: Will return True if the data includes the component type, False if it is node data
+        boolean: Will return True if the data includes the component type, False if it is node data
     """    
     if ('R' in data) or ('G' in data) or ('C' in data) or ('L' in data): return True
     elif ('n1' in data) or ('n2' in data): return False
