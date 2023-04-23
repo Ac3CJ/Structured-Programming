@@ -67,6 +67,103 @@ def ErrorRaiseCommandLineEntry(systemArguments=[]):
     raise SyntaxError("Invalid entry: " + ' '.join(systemArguments) +
                                               "\n Example Entries:\n python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]\n python CascadeCircuit.py input.net output.csv")
 
+# ============================== COMMAND LINE ==============================
+
+def FormatCommandLine(systemArguments):
+    """
+    Formats the command line inputs so that it is in the standard form to work with the other subroutines. This ensures that edgecase inputs are formatted properly
+    so that the program can read different styles user input.
+    
+    This takes in the command line input, creates a string of them separated by commas, extracts the graph parameters and removes it from the rest of the string, the 
+    program then replaces the commas with spaces in the string (without graph parameters) and concatenates both strings together before splitting it by the white space.
+
+    This is so that the graph parameters can be written as [5, 1, 2], [5,1,2], or [5,     1   ,   2] 
+
+    Args:
+        systemArguments (list): list of the arguments inputted by the user
+
+    Returns:
+        list: list of the arguments in the standard form
+    """    
+    graphParameterString = ""
+    commandLineString = ",".join(systemArguments)
+    graphParameterPosition = re.search(r"[[]\d", commandLineString)
+
+    if not (graphParameterPosition == None):
+        graphParameterString = "".join(commandLineString[graphParameterPosition.start():])
+        commandLineString = "".join(commandLineString[:graphParameterPosition.start()])
+
+    commandLineString = re.sub(r",+[.|/';:{}+,\s]*", " ", commandLineString)
+    commandLineString +=  graphParameterString
+    return commandLineString.split()
+
+def ReadCommandLine(systemArguments):
+    """
+    Reads the command line input from the user and extracts the relevant data from it
+
+    Args:
+        systemArguments (list): list of arguments inputted by the user
+
+    Raises:
+        OSError: file extension is invalid for .net
+        OSError: file extension is invalid for .csv
+
+    Returns:
+        netFileName (str): string for the .net input file
+        csvFileName (str): string for the .csv output file
+        pngFileName (str): string for the .png output file
+        userColumns (list): list of integers for user inputted graph columns
+        graphBoolean (bool): boolean to detect that a graph has been requested
+    """    
+    graphParameters = "1"           # String of 1 to initialise the data
+    graphBoolean = False
+    fileBoolean = False
+    options = [] 
+    arguments = []
+    pngFileName = ""
+
+    systemArguments = FormatCommandLine(systemArguments)
+
+    # Sets the netFileName and csvFileName to the first and second entries of the systemArguments, this gets overwritten if the user enters the file for a graph
+    netFileName = systemArguments[0]
+    if len(systemArguments) > 1: csvFileName = systemArguments[1]
+    else: ErrorRaiseCommandLineEntry(systemArguments)
+
+    # Reading System Inputs
+    try:
+        options, arguments = getopt.getopt(systemArguments,"i:p:")
+    except getopt.GetoptError:
+        print('Input invalid! Input line as: CascadeCircuit.py -i <inputfile> -p <parameter>')
+        sys.exit(2)
+
+    # Read the options that were written into the command line
+    for optionAndArgument in options:
+        if optionAndArgument[0] in ("-i", "--ifile"):
+            netFileName = optionAndArgument[1] + ".net"
+            csvFileName = optionAndArgument[1] + ".csv"
+            pngFileName = optionAndArgument[1]
+            fileBoolean = True
+        elif optionAndArgument[0] in ("-p", "--param"):
+            graphParameters = optionAndArgument[1].strip()
+            graphBoolean = True
+
+    # Check that the file extensions are correct and raise an error if they are not correct
+    if not (".net" in netFileName): raise OSError("File extension is invalid: " + netFileName)
+    if not (".csv" in csvFileName): raise OSError("File extension is invalid: " + csvFileName)
+
+    # Arguments should be empty in this case, when it is full, then the command line prompt is written incorrectly
+    if fileBoolean and len(arguments) > 0: ErrorRaiseCommandLineEntry(systemArguments)
+    if re.search(r".+[[]", graphParameters) or re.search(r"[]].+", graphParameters): ErrorRaiseCommandLineEntry(systemArguments)
+    if fileBoolean == False and len(systemArguments) > 2: ErrorRaiseCommandLineEntry(systemArguments)
+
+    # Convert the user inputted columns into a list of numbers 
+    userColumns= re.findall(r'\d+', graphParameters)        # Use REGEX to extract all numbers
+    userColumns = [int(i) for i in userColumns]             # Convert the strings into integers
+    userColumns = dataRead.RemoveEmptyElements(userColumns)       
+    userColumns = sorted(userColumns)
+
+    return netFileName, csvFileName, pngFileName, userColumns, graphBoolean
+
 # ============================== MATHEMATICS ==============================
 
 def GetFrequencies(startFrequency, endFrequency, numberOfFrequencies, logBoolean):
@@ -157,56 +254,12 @@ def main():
     # ===================== COMMAND LINE =====================
     # ========================================================
 
-    systemArguments = sys.argv[1:]
+    netFileName, csvFileName, pngFileName, userColumns, graphBoolean = ReadCommandLine(sys.argv[1:])
 
-    graphParameters = "1"           # String of 1 to initialise the data
-    graphBoolean = False
-    fileBoolean = False
-    options = [] 
-    arguments = []
+    # ========================================================
+    # ===================== FILE READING =====================
+    # ========================================================
 
-    # Sets the netFileName and csvFileName to the first and second entries of the systemArguments, this gets overwritten if the user enters the file for a graph
-    netFileName = systemArguments[0]
-    if len(systemArguments) > 1: csvFileName = systemArguments[1]
-    else: ErrorRaiseCommandLineEntry(systemArguments)
-
-    # Reading System Inputs
-    try:
-        options, arguments = getopt.getopt(systemArguments,"hi:p:")
-    except getopt.GetoptError:
-        print('Input invalid! Input line as: CascadeCircuit.py -i <inputfile> -p <parameter>')
-        sys.exit(2)
-
-    # Read the options that were written into the command line
-    for optionAndArgument in options:
-        if len(optionAndArgument) > 2: ErrorRaiseCommandLineEntry(systemArguments) 
-        if optionAndArgument[0] == '-h':
-            print ('test.py -i <inputfile> -p <parameter>')
-            sys.exit()
-        elif optionAndArgument[0] in ("-i", "--ifile"):
-            netFileName = optionAndArgument[1] + ".net"
-            csvFileName = optionAndArgument[1] + ".csv"
-            pngFileName = optionAndArgument[1]
-            fileBoolean = True
-        elif optionAndArgument[0] in ("-p", "--param"):
-            graphParameters = optionAndArgument[1].strip()
-            graphBoolean = True
-
-    # Check that the file extensions are correct and raise an error if they are not correct
-    if not (".net" in netFileName): raise OSError("File extension is invalid: " + netFileName)
-    if not (".csv" in csvFileName): raise OSError("File extension is invalid: " + csvFileName)
-
-    # Arguments should be empty in this case, when it is full, then the command line prompt is written incorrectly
-    if fileBoolean and len(arguments) > 0: ErrorRaiseCommandLineEntry(systemArguments)
-    if re.search(r".+[[]", graphParameters) or re.search(r"[]].+", graphParameters): ErrorRaiseCommandLineEntry(systemArguments)
-
-    # Convert the user inputted columns into a list of numbers 
-    userColumns= re.findall(r'\d+', graphParameters)        # Use REGEX to extract all numbers
-    userColumns = [int(i) for i in userColumns]             # Convert the strings into integers
-    userColumns = dataRead.RemoveEmptyElements(userColumns)       
-    userColumns = sorted(userColumns)
-
-    # File Reading and Error Handling
     dataWrite.CreateFile(csvFileName)
     circuitText, termsText, outputText = dataRead.ReadFile(netFileName)
 
@@ -287,4 +340,5 @@ def main():
 # ===================================================================================================
 
 if __name__ == "__main__":  # Allows code to be run as a script, but not when imported as a module. This is the top file
-    main() 
+    #main()
+    print(FormatCommandLine(sys.argv[1:]))
