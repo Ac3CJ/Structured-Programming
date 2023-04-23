@@ -10,23 +10,6 @@
 
 import re, warnings
 
-# ====================================================================================================================================
-# ========================================================== ERROR HANDLING ==========================================================
-# ====================================================================================================================================
-
-def ErrorRaiseCommandLineEntry(systemArguments=[]):
-    """
-    This raises an error with pre-determined text for when there is an error in the command line
-
-    Args:
-        systemArguments (list, optional): _description_. Defaults to [].
-
-    Raises:
-        SyntaxError: _description_
-    """    
-    raise SyntaxError("Invalid entry: " + ' '.join(systemArguments) +
-                                              "\n Example Entries:\n python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]\n python CascadeCircuit.py input.net output.csv")
-
 # =============================================================================================================================
 # ========================================================== GENERAL ==========================================================
 # =============================================================================================================================
@@ -137,6 +120,41 @@ def ExtractExponent(prefix=""):
 # ===================================================================================================================================
 # ========================================================== CIRCUIT BLOCK ==========================================================
 # ===================================================================================================================================
+
+def CheckNodeConnections(seriesComponents):
+    """
+    Checks the node connections of the circuit by using the series components node data. If the node connections are invalid then an error is raised
+
+    Erroneous inputs:
+        "n1=1 n2=2 R=1"
+
+        "n1=1 n2=2 G=0.5"
+        
+        OR
+
+        "n1=1 n2=2 R=1"
+
+        "n1=3 n2=4 R=2"
+
+    Args:
+        seriesComponents (list): list of tuples for each series component. This only contains the node data
+
+    Raises:
+        ValueError: Raised when there is a conflicting circuit connection in the series section
+        ValueError: Raised when there is a missing node connection
+    """    
+    # Gets the number of series components and makes a list of the first node values
+    seriesLength = len(seriesComponents)
+    seriesCheckList = [item[0] for item in seriesComponents]
+
+    # Check if there are repeated series components (If they share two nodes).
+    # Checks the length of the list against a set of itself, if they differ, there are duplicates.
+    if seriesLength != len(set(seriesCheckList)): raise ValueError("Conflicting Circuit Connection: Series components cannot share the same nodes.\n\nCheck CIRCUIT Block")
+
+    # Check if there are disconnected nodes, by creating a list from 1 to seriesLength and comparing it to the original seriesComponent list
+    if seriesLength != 0:
+        nodeCheckList = [i for i in range(1, int(seriesComponents[seriesLength-1][0])+1)]          
+        if seriesCheckList != nodeCheckList: raise ValueError("Missing Node Connection: All nodes must be connected by a component\n\nCheck CIRCUIT Block")
 
 def ValidateCircuit(componentData, componentText):
     """
@@ -268,7 +286,7 @@ def GetCircuitComponents(circuit):
         if (circuitComponents[i].count(0) != 0): circuitComponents[i] = ('P',) + circuitComponents[i]       
         else: 
             # Checks if the nodes are 1 value apart, if they aren't raise an error (n1=1 n2=3)
-            if (abs(circuitComponents[i][0] - circuitComponents[i][1]) > 1): raise ValueError("Invalid Circuit Connection: Series nodes must be adjacent\n" + " ".join(circuitLines[i]))
+            if (abs(circuitComponents[i][0] - circuitComponents[i][1]) != 1): raise ValueError("Invalid Circuit Connection: Series nodes must be adjacent\n" + "".join(circuitLines[i]))
 
             seriesComponents.append(sorted(circuitComponents[i][:2]))   # Appends series components to a separate list and only takes in the node values
             circuitComponents[i] = ('S',) + circuitComponents[i]
@@ -277,18 +295,7 @@ def GetCircuitComponents(circuit):
     circuitComponents = sorted(circuitComponents, key=lambda x: (x[1], x[2]))
     seriesComponents = sorted(seriesComponents, key=lambda x: (x[0], x[1]))
 
-    # Gets the number of series components and makes a list of the first node values
-    seriesLength = len(seriesComponents)
-    seriesCheckList = [item[0] for item in seriesComponents]
-
-    # Check if there are repeated series components (If they share two nodes).
-    # Checks the length of the list against a set of itself, if they differ, there are duplicates.
-    if seriesLength != len(set(seriesCheckList)): raise ValueError("Conflicting Circuit Connection: Series components cannot share the same nodes.\n\nCheck CIRCUIT Block")
-
-    # Check if there are disconnected nodes, by creating a list from 1 to seriesLength and comparing it to the original seriesComponent list
-    if seriesLength != 0:
-        nodeCheckList = [i for i in range(1, int(seriesComponents[seriesLength-1][0])+1)]          
-        if seriesCheckList != nodeCheckList: raise ValueError("Missing Node Connection: All nodes must be connected by a component\n\nCheck CIRCUIT Block")
+    CheckNodeConnections(seriesComponents)
 
     # Removes the node data from the circuitComponents tuples as they are no longer needed
     for i in range(0, len(circuitComponents)):
