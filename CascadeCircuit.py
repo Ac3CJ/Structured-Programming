@@ -44,7 +44,7 @@
 # =================================================================================================
 
 import numpy as np
-import math, sys, getopt, re
+import math, sys, getopt, re, warnings
 import DataReading as dataRead
 import DataWriting as dataWrite
 
@@ -62,7 +62,7 @@ def ErrorRaiseCommandLineEntry(systemArguments=[]):
         systemArguments (list, optional): _description_. Defaults to [].
 
     Raises:
-        SyntaxError: _description_
+        SyntaxError: Raises a syntax error that has occurred in the command line inputs
     """    
     raise SyntaxError("Invalid entry: " + ' '.join(systemArguments) +
                                               "\n Example Entries:\n python CascadeCircuit.py -i a_Test_Circuit_1 -p [5,1,2]\n python CascadeCircuit.py input.net output.csv")
@@ -237,7 +237,8 @@ def CalculateMatrix(circuitComponents, angularFrequency):
             elif componentType == "C": impedance = 1/(1j*angularFrequency*componentValue)
             else: raise ValueError("Unknown Component Found: " + " ".join(str(individualComponent)))
         except:
-            raise ZeroDivisionError("Cannot divide by 0:\n(Connection Type, Component Type, Component Value, Exponent)\n" + "".join(str(individualComponent)))
+            raise ZeroDivisionError("Cannot divide by 0:\n(Connection Type, Component Type, Component Value, Exponent)\n" + " ".join(str(individualComponent)))
+            
     
         if impedance != 0:                                                     
             componentMatrix = GetComponentMatrix(impedance, connectionType)
@@ -340,5 +341,4 @@ def main():
 # ===================================================================================================
 
 if __name__ == "__main__":  # Allows code to be run as a script, but not when imported as a module. This is the top file
-    #main()
-    print(FormatCommandLine(sys.argv[1:]))
+    main()
