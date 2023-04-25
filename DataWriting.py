@@ -42,10 +42,11 @@ def FormatNumber(value,n=11):
     Returns:
         str: String format of the value, written in scientific notation to 4 significant figures
     """    
-    return ('%.3E' % decimal.Decimal(value)).rjust(n)
+    return ('%.3e' % decimal.Decimal(value)).rjust(n)
 
 def WriteDataToFile(outputTerms, outputs, fileName, frequency):
-    """Writes the output data into the .csv file given that the file is open for editing. This function also converts the value into decibels and polar form when stated.
+    """
+    Writes the output data into the .csv file given that the file is open for editing. This function also converts the value into decibels and polar form when stated.
     outputTerm lists are laid out as: (Output Index, Variable Name, Variable Unit, Decibel Boolean, Exponent)
 
     Supporting Mathematics are linked below:
@@ -71,15 +72,15 @@ def WriteDataToFile(outputTerms, outputs, fileName, frequency):
         # Checks if the value is read in decibels
         if (outputTerm[3]):
             decibelValue = ConvertToDecibel(outputs[outputIndex], outputTerm[1])
-            firstPart = FormatNumber(np.real(decibelValue))
-            secondPart = FormatNumber(np.angle(outputs[outputIndex]))
+            firstPart = np.real(decibelValue)
+            secondPart = np.angle(outputs[outputIndex])
         else:
             outputs[outputIndex] = outputs[outputIndex] / (10 ** outputTerm[4])     # Applies the exponent to the value
-            firstPart = FormatNumber(np.real(outputs[outputIndex]))
-            secondPart = FormatNumber(np.imag(outputs[outputIndex]))
+            firstPart = np.real(outputs[outputIndex])
+            secondPart = np.imag(outputs[outputIndex])
 
         with open(fileName, 'a') as file:
-            file.write("," + firstPart + "," + secondPart)
+            file.write("," + FormatNumber(firstPart) + "," + FormatNumber(secondPart))
 
     with open(fileName, 'a') as file:
             file.write(",")
@@ -127,8 +128,9 @@ def GenerateGraph(userColumns, inputFile, outputFile):
         # Prints the axis labels with the units
         plt.xlabel("Frequency / Hz")
         plt.ylabel(list(variables.keys())[i] + " / " + unit.values[0][i])
+        plt.legend("")
         plt.savefig(outputFile + "_" + str(graphColumns[i]) + ".png")
-    return
+    return  
 
 def CreateFile(fileName):
     """
