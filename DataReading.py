@@ -155,6 +155,7 @@ def CheckNodeConnections(seriesComponents):
     if seriesLength != 0:
         nodeCheckList = [i for i in range(1, int(seriesCheckList[seriesLength-1])+1)]          
         if seriesCheckList != nodeCheckList: raise ValueError("Missing Node Connection: All nodes must be connected by a component\n\nCheck CIRCUIT Block")
+    return
 
 def ValidateCircuit(componentData, componentText):
     """
@@ -430,14 +431,14 @@ def ExtendDecibelAndExponent(outputUnit):
     """    
     DecibelAndExponent = [False, 0]
     outputUnitNew = CleanTextLine(outputUnit).strip()
-    outputUnitNew = re.sub(r"V?A?W?(Ohms)?", "", outputUnitNew).strip()     # Checks for the known variable units and removes them from the decibels and exponent
+    outputUnitNew = re.sub(r"V?A?W?(Ohms)?L?", "", outputUnitNew).strip()     # Checks for the known variable units and removes them from the decibels and exponent
 
     if "dB" in outputUnitNew:              # When dB is found, it sets the bool to True and removes it from the string
         DecibelAndExponent[0] = True
         outputUnitNew = outputUnitNew.replace("dB", "").strip()
 
     # If there is more information other than the prefix, raise an error
-    if (len(outputUnitNew) > 1): raise ValueError("Error Detected: " + outputUnit + "\nCheck Circuit")   
+    if (len(outputUnitNew) > 1): raise SyntaxError("Error Detected: " + outputUnit + "\nCheck Circuit")   
     if (len(outputUnitNew) > 0): DecibelAndExponent[1] = ExtractExponent(outputUnitNew[0])  # Checks the first character in the string which will be the prefix
 
     return DecibelAndExponent
@@ -469,7 +470,7 @@ def InsertOutputIndex(outputVariable):
     elif "Ai" in outputVariable:    return 9
     elif "Ap" in outputVariable:    return 10
     elif "T" in outputVariable:     return 11
-    raise Exception("Invalid Output Variable: " + str(outputVariable)) # Raise an error if an unknown output unit is entered
+    raise SyntaxError("Invalid Output Variable: " + str(outputVariable)) # Raise an error if an unknown output unit is entered
 
 def ConvertOutputs(outputLine):
     """
@@ -487,7 +488,7 @@ def ConvertOutputs(outputLine):
     output = re.split("\s", outputLine, 1)              # Split on first white space
     if len(output) < 2: output.append("L")              # If the gain has no units, then append an L 
     output.insert(0, InsertOutputIndex(output[0]))      # Insert the output index to the start of the list
-    output.extend(ExtendDecibelAndExponent(output[2]))  # Extend the list with the 
+    output.extend(ExtendDecibelAndExponent(output[2]))  # Extend the list with the rest of the data
     
     return tuple(output)
 
