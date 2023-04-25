@@ -260,6 +260,17 @@ files_examined+=nexam
 correct_list.append(clist)
 incorrect_list.append(ilist)
 
+ext_tests=["Ext_a_Test_Circuit_1", "Ext_d_LPF_B50", "Ext_e_Ladder_100", "Ext_e_Ladder_400", "Ext_mdB_a_Test_Circuit_1"]
+ncorr,nexam,clist,ilist=run_tests(ext_tests,Abs_tol,Rel_tol)
+print("%s\nExt_test: %d files tested, %d correct, %d incorrect"%(divider_line,nexam, ncorr,(nexam-ncorr)))
+print("Correct files are:",clist)
+print("Incorrect files are:",ilist)
+print(divider_line)
+correct_files+=ncorr
+files_examined+=nexam
+correct_list.append(clist)
+incorrect_list.append(ilist)
+
 
 incorrect_files=files_examined-correct_files
 print("\n%s\n\t\tTotals\n%d files tested, %d correct, %d incorrect"%(divider_line,files_examined, correct_files,incorrect_files))
