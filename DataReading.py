@@ -319,6 +319,7 @@ def CheckLogarithmicSweep(term):
         boolean: Boolean value to state when to apply the sweep
     """    
     if "L" in term: return True
+    print("test")
     return False
 
 def UpdateTermData(term, termsList):
@@ -344,12 +345,12 @@ def UpdateTermData(term, termsList):
     elif "RL" in term:      termsList[2] = termValue
     elif "Fstart" in term:  
         termsList[3] = termValue
-        termsList[6] = CheckLogarithmicSweep(term)      # Check if there is an L in the frequency 
+        termsList[6] = CheckLogarithmicSweep(term[0])      # Check if there is an L in the frequency 
     elif "Fend" in term:    
         termsList[4] = termValue
-        termsList[6] = CheckLogarithmicSweep(term)
+        termsList[6] = CheckLogarithmicSweep(term[0])
     elif "Nfreqs" in term:  termsList[5] = termValue
-    else: raise ValueError("Invalid Entry: " + str(term) + "\n Please Check Circuit")   # Throw an error if an unexpected term is entered
+    else: raise ValueError("Invalid Entry: " + str(term) + "\n Please Check TERMS")   # Throw an error if an unexpected term is entered
     return termsList
 
 def ConvertTerms(termLine, termsList, termsCounter):
