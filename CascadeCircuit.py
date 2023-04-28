@@ -87,6 +87,10 @@ def FormatCommandLine(systemArguments):
     """    
     graphParameterString = ""
     commandLineString = ",".join(systemArguments)
+
+    commandLineString = re.sub(r"[[][.|/';:{}+,\s]*", "[", commandLineString)
+    commandLineString = re.sub(r"[.|/';:{}+,\s]*[]]", "]", commandLineString)
+
     graphParameterPosition = re.search(r"[[]\d", commandLineString)
 
     if not (graphParameterPosition == None):
@@ -153,8 +157,11 @@ def ReadCommandLine(systemArguments):
 
     # Arguments should be empty in this case, when it is full, then the command line prompt is written incorrectly
     if fileBoolean and len(arguments) > 0: ErrorRaiseCommandLineEntry(systemArguments)
-    if re.search(r".+[[]", graphParameters) or re.search(r"[]].+", graphParameters): ErrorRaiseCommandLineEntry(systemArguments)
     if fileBoolean == False and len(systemArguments) > 2: ErrorRaiseCommandLineEntry(systemArguments)
+
+    if graphBoolean == True:
+        if re.search(r".+[[]", graphParameters) or re.search(r"[]].+", graphParameters): ErrorRaiseCommandLineEntry(systemArguments)
+        if re.search(r"[[]\d", graphParameters) == None or re.search(r"\d[]]", graphParameters) == None: ErrorRaiseCommandLineEntry(systemArguments) 
 
     # Convert the user inputted columns into a list of numbers 
     userColumns= re.findall(r'\d+', graphParameters)        # Use REGEX to extract all numbers
@@ -277,8 +284,8 @@ def main():
     dataRead.CheckEmptyListError(outputTerms, "OUTPUT")
 
     # Check if the entered maximum column, the user entered is greater than the output terms or less than equal to 0
-    if (len(outputTerms) < max(userColumns)) or (min(userColumns) <= 0): raise IndexError("Column " + str(max(userColumns)) + 
-                                                                                          " is out of range. Enter a value between 1-" + str(len(outputTerms)-1))
+    if (((len(outputTerms)*2)) < max(userColumns)) or (min(userColumns) <= 0): raise IndexError("Column " + str(max(userColumns)) + 
+                                                                                          " is out of range. Enter a value between 1-" + str(((len(outputTerms)*2))))
 
     # Write to the file to get the initial format
     dataWrite.InitialiseFile(csvFileName, outputTerms)   
@@ -320,7 +327,7 @@ def main():
                 outputValues["inputCurrent"] = inputSource[1] * (sourceImpedance / (sourceImpedance + outputValues["inputImpedance"]))
                 outputValues["inputVoltage"] = outputValues["inputCurrent"] * outputValues["inputImpedance"]
         except:
-            raise ZeroDivisionError("Division by Zero has occurred! Please check the CIRCUIT and TERMS Blocks in: " + netFileName)    
+            raise ZeroDivisionError("Division by Zero has occurred in Output Calculations! Please check the CIRCUIT and TERMS Blocks in: " + netFileName)    
         
         outputValues["inputPower"] = outputValues["inputVoltage"] * np.conj(outputValues["inputCurrent"])
         outputValues["outputVoltage"] = outputValues["inputVoltage"] * outputValues["voltageGain"]
@@ -342,3 +349,4 @@ def main():
 
 if __name__ == "__main__":  # Allows code to be run as a script, but not when imported as a module. This is the top file
     main()
+    #print(FormatCommandLine(sys.argv[1:]))
