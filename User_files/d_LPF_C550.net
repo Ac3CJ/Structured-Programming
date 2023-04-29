@@ -1,0 +1,29 @@
+<CIRCUIT>
+n1=1 n2=0 C=13.6e-9
+n1=1 n2=2 L=17.4e-6
+n1=2 n2=0 C=19.1e-9
+n1=2 n2=3 L=17.4e-6
+n1=3 n2=0 C=13.6e-9
+</CIRCUIT>
+
+<TERMS>
+# a 5V Thevenin voltage source with RS=50 ohms connected
+# between node 1 and the implicit common (0) node
+VT=5 RS=50
+# load connected between last node and the implicit common (0)
+RL=50
+Fstart=10.0 Fend=10e+6 Nfreqs=50
+</TERMS>
+
+<OUTPUT>
+Vin V
+Vout V
+Av 
+Iin A
+Iout A
+Ai
+Zin Ohms
+Zout Ohms 
+Pin W
+Pout W
+</OUTPUT>
