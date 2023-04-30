@@ -319,7 +319,6 @@ def CheckLogarithmicSweep(term):
         boolean: Boolean value to state when to apply the sweep
     """    
     if "L" in term: return True
-    print("test")
     return False
 
 def UpdateTermData(term, termsList):
@@ -514,6 +513,7 @@ def GetOutputOrder(outputs):
         
     # Removes empty elements from list
     outputTerms = RemoveEmptyElements(outputTerms)
+
     return outputTerms
 
 # ==================================================================================================================================
