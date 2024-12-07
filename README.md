@@ -25,12 +25,12 @@ This program is designed to read and analyze the output Voltage/Current (V/I) ch
 ## Installation
 1. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/ee20084-cascade-analyzer.git
+   git clone https://github.com/Ac3CJ/Structured-Programming.git
    ```
 
 2. Navigate into the project directory:
    ```bash
-   cd ee20084-cascade-analyzer
+   cd Structured-Programming
    ```
 
 3. Install the required libraries:
@@ -41,7 +41,7 @@ This program is designed to read and analyze the output Voltage/Current (V/I) ch
 ## Usage
 To run the program, simply execute the following command in your terminal:
 ```bash
-python main.py
+python CascadeCircuit.py
 ```
 
 ### Input
