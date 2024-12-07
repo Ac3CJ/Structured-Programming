@@ -77,4 +77,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgements
 - Dr. [Jonathan Graham-Harper-Cater](https://researchportal.bath.ac.uk/en/persons/jonathan-graham-harper-cater), University of Bath
 - Dr. [Stephen Pennock](https://researchportal.bath.ac.uk/en/persons/stephen-pennock), University of Bath
-```
